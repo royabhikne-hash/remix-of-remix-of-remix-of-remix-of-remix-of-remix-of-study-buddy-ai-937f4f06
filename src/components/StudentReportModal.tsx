@@ -6,6 +6,21 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import jsPDF from "jspdf";
 import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
+} from "recharts";
+import {
   X,
   TrendingUp,
   TrendingDown,
@@ -18,6 +33,7 @@ import {
   FileText,
   Loader2,
   Download,
+  BarChart3,
 } from "lucide-react";
 
 interface StudentReportModalProps {
@@ -165,6 +181,69 @@ const StudentReportModal = ({
     .filter((s) => s.ai_summary)
     .map((s) => s.ai_summary!)
     .slice(0, 3);
+
+  // Chart data preparation
+  const getProgressChartData = () => {
+    const last7Days: { date: string; score: number; time: number }[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date();
+      date.setDate(date.getDate() - i);
+      const dateStr = date.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+      
+      const daySessions = sessions.filter((s) => {
+        const sessionDate = new Date(s.created_at);
+        return sessionDate.toDateString() === date.toDateString();
+      });
+      
+      const avgScore = daySessions.length > 0
+        ? Math.round(daySessions.reduce((acc, s) => acc + (s.improvement_score || 50), 0) / daySessions.length)
+        : 0;
+      const totalTime = daySessions.reduce((acc, s) => acc + (s.time_spent || 0), 0);
+      
+      last7Days.push({ date: dateStr, score: avgScore, time: Math.round(totalTime / 60) });
+    }
+    return last7Days;
+  };
+
+  const getSubjectChartData = () => {
+    const subjectData: Record<string, { sessions: number; avgScore: number; totalScore: number }> = {};
+    sessions.forEach((s) => {
+      const subject = s.subject || "General";
+      if (!subjectData[subject]) {
+        subjectData[subject] = { sessions: 0, avgScore: 0, totalScore: 0 };
+      }
+      subjectData[subject].sessions++;
+      subjectData[subject].totalScore += s.improvement_score || 50;
+    });
+    
+    return Object.entries(subjectData)
+      .map(([name, data]) => ({
+        name,
+        sessions: data.sessions,
+        avgScore: Math.round(data.totalScore / data.sessions),
+      }))
+      .sort((a, b) => b.sessions - a.sessions)
+      .slice(0, 5);
+  };
+
+  const getUnderstandingChartData = () => {
+    const colors: Record<string, string> = {
+      excellent: "#22c55e",
+      good: "#3b82f6",
+      average: "#f59e0b",
+      weak: "#ef4444",
+    };
+    
+    return Object.entries(understandingDist).map(([level, count]) => ({
+      name: level.charAt(0).toUpperCase() + level.slice(1),
+      value: count,
+      color: colors[level] || "#6b7280",
+    }));
+  };
+
+  const progressData = getProgressChartData();
+  const subjectData = getSubjectChartData();
+  const understandingChartData = getUnderstandingChartData();
 
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString("en-IN", {
@@ -478,6 +557,112 @@ const StudentReportModal = ({
                   </div>
                 </div>
               </div>
+
+              {/* Performance Charts Section */}
+              {sessions.length > 0 && (
+                <div>
+                  <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                    <BarChart3 className="w-5 h-5 text-primary" />
+                    Performance Analytics
+                  </h3>
+                  
+                  {/* Progress Over Time Chart */}
+                  <div className="grid md:grid-cols-2 gap-6 mb-6">
+                    <div className="edu-card p-4">
+                      <h4 className="text-sm font-medium mb-3 text-muted-foreground">Progress Over Time (7 Days)</h4>
+                      <ResponsiveContainer width="100%" height={200}>
+                        <LineChart data={progressData}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                          <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+                          <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+                          <Tooltip
+                            contentStyle={{
+                              backgroundColor: "hsl(var(--card))",
+                              border: "1px solid hsl(var(--border))",
+                              borderRadius: "8px",
+                            }}
+                            labelStyle={{ color: "hsl(var(--foreground))" }}
+                          />
+                          <Line
+                            type="monotone"
+                            dataKey="score"
+                            stroke="hsl(var(--primary))"
+                            strokeWidth={2}
+                            dot={{ fill: "hsl(var(--primary))", strokeWidth: 2 }}
+                            name="Avg Score"
+                          />
+                          <Line
+                            type="monotone"
+                            dataKey="time"
+                            stroke="hsl(var(--accent))"
+                            strokeWidth={2}
+                            dot={{ fill: "hsl(var(--accent))", strokeWidth: 2 }}
+                            name="Time (min)"
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+
+                    {/* Understanding Distribution Pie Chart */}
+                    {understandingChartData.length > 0 && (
+                      <div className="edu-card p-4">
+                        <h4 className="text-sm font-medium mb-3 text-muted-foreground">Understanding Distribution</h4>
+                        <ResponsiveContainer width="100%" height={200}>
+                          <PieChart>
+                            <Pie
+                              data={understandingChartData}
+                              cx="50%"
+                              cy="50%"
+                              innerRadius={40}
+                              outerRadius={70}
+                              paddingAngle={3}
+                              dataKey="value"
+                            >
+                              {understandingChartData.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={entry.color} />
+                              ))}
+                            </Pie>
+                            <Tooltip
+                              contentStyle={{
+                                backgroundColor: "hsl(var(--card))",
+                                border: "1px solid hsl(var(--border))",
+                                borderRadius: "8px",
+                              }}
+                            />
+                            <Legend
+                              formatter={(value) => <span className="text-foreground text-xs">{value}</span>}
+                            />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Subject Performance Bar Chart */}
+                  {subjectData.length > 0 && (
+                    <div className="edu-card p-4 mb-6">
+                      <h4 className="text-sm font-medium mb-3 text-muted-foreground">Subject Performance</h4>
+                      <ResponsiveContainer width="100%" height={200}>
+                        <BarChart data={subjectData}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                          <XAxis dataKey="name" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+                          <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+                          <Tooltip
+                            contentStyle={{
+                              backgroundColor: "hsl(var(--card))",
+                              border: "1px solid hsl(var(--border))",
+                              borderRadius: "8px",
+                            }}
+                            labelStyle={{ color: "hsl(var(--foreground))" }}
+                          />
+                          <Bar dataKey="sessions" fill="hsl(var(--primary))" name="Sessions" radius={[4, 4, 0, 0]} />
+                          <Bar dataKey="avgScore" fill="hsl(var(--accent))" name="Avg Score" radius={[4, 4, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Subjects Studied */}
               {subjectsStudied.length > 0 && (
