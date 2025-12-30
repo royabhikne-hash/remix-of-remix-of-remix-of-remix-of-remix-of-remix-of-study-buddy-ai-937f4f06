@@ -1,10 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import jsPDF from "jspdf";
+import html2canvas from "html2canvas";
 import {
   LineChart,
   Line,
@@ -19,6 +20,7 @@ import {
   Pie,
   Cell,
   Legend,
+  ReferenceLine,
 } from "recharts";
 import {
   X,
@@ -34,6 +36,8 @@ import {
   Loader2,
   Download,
   BarChart3,
+  Image,
+  Users,
 } from "lucide-react";
 
 interface StudentReportModalProps {
@@ -43,6 +47,7 @@ interface StudentReportModalProps {
   studentName: string;
   studentPhoto?: string;
   studentClass: string;
+  schoolId?: string;
 }
 
 interface SessionData {
@@ -67,6 +72,14 @@ interface QuizData {
   understanding_result: string | null;
 }
 
+interface ClassAverages {
+  avgSessions: number;
+  avgTimeSpent: number;
+  avgAccuracy: number;
+  avgQuizzes: number;
+  avgImprovementScore: number;
+}
+
 const StudentReportModal = ({
   isOpen,
   onClose,
@@ -74,12 +87,17 @@ const StudentReportModal = ({
   studentName,
   studentPhoto,
   studentClass,
+  schoolId,
 }: StudentReportModalProps) => {
   const { toast } = useToast();
   const [sessions, setSessions] = useState<SessionData[]>([]);
   const [quizzes, setQuizzes] = useState<QuizData[]>([]);
   const [loading, setLoading] = useState(true);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [exportingCharts, setExportingCharts] = useState(false);
+  const [classAverages, setClassAverages] = useState<ClassAverages | null>(null);
+  const [showComparison, setShowComparison] = useState(true);
+  const chartsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (isOpen && studentId) {
@@ -110,10 +128,90 @@ const StudentReportModal = ({
 
       setSessions(sessionsData || []);
       setQuizzes(quizzesData || []);
+
+      // Load class averages for comparison
+      await loadClassAverages(weekAgo);
     } catch (error) {
       console.error("Error loading student data:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadClassAverages = async (weekAgo: Date) => {
+    try {
+      // Get all students in the same class
+      const { data: classStudents } = await supabase
+        .from("students")
+        .select("id")
+        .eq("class", studentClass);
+
+      if (!classStudents || classStudents.length === 0) return;
+
+      const studentIds = classStudents.map((s) => s.id);
+
+      // Get all sessions for these students
+      const { data: classSessions } = await supabase
+        .from("study_sessions")
+        .select("*")
+        .in("student_id", studentIds)
+        .gte("created_at", weekAgo.toISOString());
+
+      const { data: classQuizzes } = await supabase
+        .from("quiz_attempts")
+        .select("*")
+        .in("student_id", studentIds)
+        .gte("created_at", weekAgo.toISOString());
+
+      if (!classSessions && !classQuizzes) return;
+
+      const studentCount = classStudents.length;
+      const totalSessions = classSessions?.length || 0;
+      const totalQuizzes = classQuizzes?.length || 0;
+      const totalTimeSpent = classSessions?.reduce((acc, s) => acc + (s.time_spent || 0), 0) || 0;
+      const totalAccuracy = classQuizzes?.reduce((acc, q) => acc + (q.accuracy_percentage || 0), 0) || 0;
+      const totalImprovementScore = classSessions?.reduce((acc, s) => acc + (s.improvement_score || 50), 0) || 0;
+
+      setClassAverages({
+        avgSessions: Math.round((totalSessions / studentCount) * 10) / 10,
+        avgTimeSpent: Math.round(totalTimeSpent / studentCount),
+        avgAccuracy: totalQuizzes > 0 ? Math.round(totalAccuracy / totalQuizzes) : 0,
+        avgQuizzes: Math.round((totalQuizzes / studentCount) * 10) / 10,
+        avgImprovementScore: totalSessions > 0 ? Math.round(totalImprovementScore / totalSessions) : 50,
+      });
+    } catch (error) {
+      console.error("Error loading class averages:", error);
+    }
+  };
+
+  const handleExportCharts = async () => {
+    if (!chartsRef.current) return;
+    
+    setExportingCharts(true);
+    try {
+      const canvas = await html2canvas(chartsRef.current, {
+        backgroundColor: "#ffffff",
+        scale: 2,
+      });
+      
+      const link = document.createElement("a");
+      link.download = `${studentName.replace(/\s+/g, "_")}_Charts_${new Date().toISOString().split("T")[0]}.png`;
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+
+      toast({
+        title: "Charts Exported!",
+        description: "Performance charts saved as image.",
+      });
+    } catch (error) {
+      console.error("Error exporting charts:", error);
+      toast({
+        title: "Export Failed",
+        description: "Could not export charts. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setExportingCharts(false);
     }
   };
 
@@ -125,6 +223,9 @@ const StudentReportModal = ({
       ? Math.round(quizzes.reduce((acc, q) => acc + (q.accuracy_percentage || 0), 0) / quizzes.length)
       : 0,
     totalQuizzes: quizzes.length,
+    avgImprovementScore: sessions.length > 0
+      ? Math.round(sessions.reduce((acc, s) => acc + (s.improvement_score || 50), 0) / sessions.length)
+      : 50,
   };
 
   // Get all weak areas from sessions
@@ -530,30 +631,75 @@ const StudentReportModal = ({
             </div>
           ) : (
             <div className="p-6 space-y-6">
-              {/* Weekly Summary Stats */}
+              {/* Weekly Summary Stats with Class Comparison */}
               <div>
-                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                  <Calendar className="w-5 h-5 text-primary" />
-                  Weekly Summary (Last 7 Days)
-                </h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold flex items-center gap-2">
+                    <Calendar className="w-5 h-5 text-primary" />
+                    Weekly Summary (Last 7 Days)
+                  </h3>
+                  {classAverages && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowComparison(!showComparison)}
+                      className="flex items-center gap-2"
+                    >
+                      <Users className="w-4 h-4" />
+                      {showComparison ? "Hide" : "Show"} Class Avg
+                    </Button>
+                  )}
+                </div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div className="edu-card p-4 text-center">
                     <p className="text-3xl font-bold text-primary">{weeklyStats.totalSessions}</p>
                     <p className="text-sm text-muted-foreground">Study Sessions</p>
+                    {showComparison && classAverages && (
+                      <div className="mt-2 text-xs">
+                        <span className={weeklyStats.totalSessions >= classAverages.avgSessions ? "text-accent" : "text-destructive"}>
+                          Class Avg: {classAverages.avgSessions}
+                          {weeklyStats.totalSessions >= classAverages.avgSessions ? " ↑" : " ↓"}
+                        </span>
+                      </div>
+                    )}
                   </div>
                   <div className="edu-card p-4 text-center">
                     <p className="text-3xl font-bold text-accent">
                       {Math.round(weeklyStats.totalTimeSpent / 60)}m
                     </p>
                     <p className="text-sm text-muted-foreground">Time Spent</p>
+                    {showComparison && classAverages && (
+                      <div className="mt-2 text-xs">
+                        <span className={weeklyStats.totalTimeSpent >= classAverages.avgTimeSpent ? "text-accent" : "text-destructive"}>
+                          Class Avg: {Math.round(classAverages.avgTimeSpent / 60)}m
+                          {weeklyStats.totalTimeSpent >= classAverages.avgTimeSpent ? " ↑" : " ↓"}
+                        </span>
+                      </div>
+                    )}
                   </div>
                   <div className="edu-card p-4 text-center">
                     <p className="text-3xl font-bold text-primary">{weeklyStats.totalQuizzes}</p>
                     <p className="text-sm text-muted-foreground">Quizzes Taken</p>
+                    {showComparison && classAverages && (
+                      <div className="mt-2 text-xs">
+                        <span className={weeklyStats.totalQuizzes >= classAverages.avgQuizzes ? "text-accent" : "text-destructive"}>
+                          Class Avg: {classAverages.avgQuizzes}
+                          {weeklyStats.totalQuizzes >= classAverages.avgQuizzes ? " ↑" : " ↓"}
+                        </span>
+                      </div>
+                    )}
                   </div>
                   <div className="edu-card p-4 text-center">
                     <p className="text-3xl font-bold text-accent">{weeklyStats.avgAccuracy}%</p>
                     <p className="text-sm text-muted-foreground">Avg Accuracy</p>
+                    {showComparison && classAverages && (
+                      <div className="mt-2 text-xs">
+                        <span className={weeklyStats.avgAccuracy >= classAverages.avgAccuracy ? "text-accent" : "text-destructive"}>
+                          Class Avg: {classAverages.avgAccuracy}%
+                          {weeklyStats.avgAccuracy >= classAverages.avgAccuracy ? " ↑" : " ↓"}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -561,47 +707,80 @@ const StudentReportModal = ({
               {/* Performance Charts Section */}
               {sessions.length > 0 && (
                 <div>
-                  <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                    <BarChart3 className="w-5 h-5 text-primary" />
-                    Performance Analytics
-                  </h3>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold flex items-center gap-2">
+                      <BarChart3 className="w-5 h-5 text-primary" />
+                      Performance Analytics
+                    </h3>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleExportCharts}
+                      disabled={exportingCharts}
+                      className="flex items-center gap-2"
+                    >
+                      {exportingCharts ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <>
+                          <Image className="w-4 h-4" />
+                          Export Charts
+                        </>
+                      )}
+                    </Button>
+                  </div>
                   
-                  {/* Progress Over Time Chart */}
-                  <div className="grid md:grid-cols-2 gap-6 mb-6">
-                    <div className="edu-card p-4">
-                      <h4 className="text-sm font-medium mb-3 text-muted-foreground">Progress Over Time (7 Days)</h4>
-                      <ResponsiveContainer width="100%" height={200}>
-                        <LineChart data={progressData}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                          <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-                          <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-                          <Tooltip
-                            contentStyle={{
-                              backgroundColor: "hsl(var(--card))",
-                              border: "1px solid hsl(var(--border))",
-                              borderRadius: "8px",
-                            }}
-                            labelStyle={{ color: "hsl(var(--foreground))" }}
-                          />
-                          <Line
-                            type="monotone"
-                            dataKey="score"
-                            stroke="hsl(var(--primary))"
-                            strokeWidth={2}
-                            dot={{ fill: "hsl(var(--primary))", strokeWidth: 2 }}
-                            name="Avg Score"
-                          />
-                          <Line
-                            type="monotone"
-                            dataKey="time"
-                            stroke="hsl(var(--accent))"
-                            strokeWidth={2}
-                            dot={{ fill: "hsl(var(--accent))", strokeWidth: 2 }}
-                            name="Time (min)"
-                          />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </div>
+                  {/* Charts container with ref for export */}
+                  <div ref={chartsRef} className="bg-background p-2 rounded-lg">
+                    {/* Progress Over Time Chart with Class Average */}
+                    <div className="grid md:grid-cols-2 gap-6 mb-6">
+                      <div className="edu-card p-4">
+                        <h4 className="text-sm font-medium mb-3 text-muted-foreground">
+                          Progress Over Time (7 Days)
+                          {showComparison && classAverages && (
+                            <span className="ml-2 text-xs text-primary">— Class Avg Line</span>
+                          )}
+                        </h4>
+                        <ResponsiveContainer width="100%" height={200}>
+                          <LineChart data={progressData}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                            <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+                            <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+                            <Tooltip
+                              contentStyle={{
+                                backgroundColor: "hsl(var(--card))",
+                                border: "1px solid hsl(var(--border))",
+                                borderRadius: "8px",
+                              }}
+                              labelStyle={{ color: "hsl(var(--foreground))" }}
+                            />
+                            {showComparison && classAverages && (
+                              <ReferenceLine 
+                                y={classAverages.avgImprovementScore} 
+                                stroke="hsl(var(--destructive))"
+                                strokeDasharray="5 5"
+                                label={{ value: "Class Avg", position: "right", fontSize: 10, fill: "hsl(var(--destructive))" }}
+                              />
+                            )}
+                            <Line
+                              type="monotone"
+                              dataKey="score"
+                              stroke="hsl(var(--primary))"
+                              strokeWidth={2}
+                              dot={{ fill: "hsl(var(--primary))", strokeWidth: 2 }}
+                              name="Avg Score"
+                            />
+                            <Line
+                              type="monotone"
+                              dataKey="time"
+                              stroke="hsl(var(--accent))"
+                              strokeWidth={2}
+                              dot={{ fill: "hsl(var(--accent))", strokeWidth: 2 }}
+                              name="Time (min)"
+                            />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
 
                     {/* Understanding Distribution Pie Chart */}
                     {understandingChartData.length > 0 && (
@@ -661,6 +840,7 @@ const StudentReportModal = ({
                       </ResponsiveContainer>
                     </div>
                   )}
+                  </div>
                 </div>
               )}
 
