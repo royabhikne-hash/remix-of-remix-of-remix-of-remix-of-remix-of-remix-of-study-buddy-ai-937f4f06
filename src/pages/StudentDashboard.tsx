@@ -158,6 +158,8 @@ const StudentDashboard = () => {
       totalQuestions: number;
       accuracy: number;
       understanding: "strong" | "partial" | "weak";
+      questions: any[];
+      answers: string[];
     };
   }) => {
     setIsStudying(false);
@@ -206,16 +208,20 @@ const StudentDashboard = () => {
         } else {
           // Save quiz attempt if quiz was taken
           if (summary.quizResult && sessionData) {
-            await supabase.from("quiz_attempts").insert({
+            const { error: quizError } = await supabase.from("quiz_attempts").insert({
               student_id: studentId,
               session_id: sessionData.id,
-              questions: [],
-              answers: [],
+              questions: summary.quizResult.questions,
+              answers: summary.quizResult.answers,
               correct_count: summary.quizResult.correctCount,
               total_questions: summary.quizResult.totalQuestions,
               accuracy_percentage: summary.quizResult.accuracy,
               understanding_result: summary.quizResult.understanding,
             });
+            
+            if (quizError) {
+              console.error("Error saving quiz attempt:", quizError);
+            }
           }
           
           // Refresh data

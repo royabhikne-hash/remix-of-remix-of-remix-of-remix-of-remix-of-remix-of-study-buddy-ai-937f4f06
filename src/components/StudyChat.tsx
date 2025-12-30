@@ -42,6 +42,8 @@ interface StudyChatProps {
       totalQuestions: number;
       accuracy: number;
       understanding: "strong" | "partial" | "weak";
+      questions: QuizQuestion[];
+      answers: string[];
     };
   }) => void;
   studentId?: string;
@@ -330,7 +332,9 @@ const StudyChat = ({ onEndStudy, studentId }: StudyChatProps) => {
           correctCount,
           totalQuestions: quizQuestions.length,
           accuracy,
-          understanding
+          understanding,
+          questions: quizQuestions,
+          answers: userAnswers
         }
       });
     }, 3000);
