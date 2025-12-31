@@ -1,1 +1,13 @@
 project_id = "oqkkgzmmhogaortvalxa"
+
+[functions.generate-quiz]
+verify_jwt = true
+
+[functions.send-weekly-report]
+verify_jwt = false
+
+[functions.study-chat]
+verify_jwt = true
+
+[functions.notify-school-registration]
+verify_jwt = false

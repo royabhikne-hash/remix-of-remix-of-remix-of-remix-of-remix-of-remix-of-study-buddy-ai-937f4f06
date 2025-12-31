@@ -179,27 +179,39 @@ export type Database = {
       }
       schools: {
         Row: {
+          contact_whatsapp: string | null
           created_at: string
           district: string | null
+          email: string | null
+          fee_paid: boolean | null
           id: string
+          is_banned: boolean | null
           name: string
           password_hash: string
           school_id: string
           state: string | null
         }
         Insert: {
+          contact_whatsapp?: string | null
           created_at?: string
           district?: string | null
+          email?: string | null
+          fee_paid?: boolean | null
           id?: string
+          is_banned?: boolean | null
           name: string
           password_hash: string
           school_id: string
           state?: string | null
         }
         Update: {
+          contact_whatsapp?: string | null
           created_at?: string
           district?: string | null
+          email?: string | null
+          fee_paid?: boolean | null
           id?: string
+          is_banned?: boolean | null
           name?: string
           password_hash?: string
           school_id?: string
@@ -219,9 +231,11 @@ export type Database = {
           full_name: string
           id: string
           is_approved: boolean
+          is_banned: boolean | null
           parent_whatsapp: string
           phone: string
           photo_url: string | null
+          rejection_reason: string | null
           school_id: string | null
           state: string
           updated_at: string
@@ -238,9 +252,11 @@ export type Database = {
           full_name: string
           id?: string
           is_approved?: boolean
+          is_banned?: boolean | null
           parent_whatsapp: string
           phone: string
           photo_url?: string | null
+          rejection_reason?: string | null
           school_id?: string | null
           state: string
           updated_at?: string
@@ -257,9 +273,11 @@ export type Database = {
           full_name?: string
           id?: string
           is_approved?: boolean
+          is_banned?: boolean | null
           parent_whatsapp?: string
           phone?: string
           photo_url?: string | null
+          rejection_reason?: string | null
           school_id?: string | null
           state?: string
           updated_at?: string

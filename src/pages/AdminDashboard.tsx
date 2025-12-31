@@ -18,6 +18,12 @@ import {
   EyeOff,
   X,
   ClipboardList,
+  Ban,
+  DollarSign,
+  CheckCircle,
+  XCircle,
+  Trash2,
+  AlertTriangle,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -27,7 +33,18 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import StudentReportModal from "@/components/StudentReportModal";
 
 interface School {
@@ -37,6 +54,10 @@ interface School {
   district: string | null;
   state: string | null;
   studentCount: number;
+  is_banned: boolean;
+  fee_paid: boolean;
+  email: string | null;
+  contact_whatsapp: string | null;
 }
 
 interface Student {
@@ -46,6 +67,8 @@ interface Student {
   parent_whatsapp: string;
   school_name: string;
   photo_url?: string;
+  is_banned: boolean;
+  is_approved: boolean;
 }
 
 const AdminDashboard = () => {
@@ -64,6 +87,8 @@ const AdminDashboard = () => {
     name: "",
     district: "",
     state: "Bihar",
+    email: "",
+    contact_whatsapp: "",
   });
   const [addingSchool, setAddingSchool] = useState(false);
   const [generatedCredentials, setGeneratedCredentials] = useState<{ id: string; password: string } | null>(null);
@@ -74,6 +99,16 @@ const AdminDashboard = () => {
   // Student report modal state
   const [showReportModal, setShowReportModal] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+
+  // Ban/Delete confirmation states
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<{
+    open: boolean;
+    type: "ban" | "unban" | "delete" | "fee";
+    entity: "school" | "student";
+    id: string;
+    name: string;
+  } | null>(null);
 
   useEffect(() => {
     const storedAdminId = localStorage.getItem("adminId");
@@ -101,6 +136,8 @@ const AdminDashboard = () => {
         const schoolsWithCounts = schoolsData.map((school) => ({
           ...school,
           studentCount: studentsData.filter((s) => s.school_id === school.id).length,
+          is_banned: school.is_banned || false,
+          fee_paid: school.fee_paid !== false,
         }));
         setSchools(schoolsWithCounts);
 
@@ -111,6 +148,8 @@ const AdminDashboard = () => {
           parent_whatsapp: s.parent_whatsapp,
           school_name: (s.schools as any)?.name || "No School",
           photo_url: s.photo_url || undefined,
+          is_banned: s.is_banned || false,
+          is_approved: s.is_approved || false,
         }));
         setStudents(formattedStudents);
       }
@@ -122,7 +161,6 @@ const AdminDashboard = () => {
   };
 
   const generateSchoolCredentials = (name: string) => {
-    // Generate school ID from name
     const prefix = name
       .split(" ")
       .map((word) => word.charAt(0).toLowerCase())
@@ -154,6 +192,8 @@ const AdminDashboard = () => {
         name: newSchool.name,
         district: newSchool.district || null,
         state: newSchool.state || null,
+        email: newSchool.email || null,
+        contact_whatsapp: newSchool.contact_whatsapp || null,
       });
 
       if (error) {
@@ -186,6 +226,157 @@ const AdminDashboard = () => {
     }
   };
 
+  const handleBanSchool = async (schoolId: string, ban: boolean) => {
+    setActionLoading(schoolId);
+    try {
+      const { error } = await supabase
+        .from("schools")
+        .update({ is_banned: ban })
+        .eq("id", schoolId);
+
+      if (error) throw error;
+
+      setSchools(prev => prev.map(s => 
+        s.id === schoolId ? { ...s, is_banned: ban } : s
+      ));
+
+      toast({
+        title: ban ? "School Banned" : "School Unbanned",
+        description: ban ? "School can no longer access the dashboard." : "School access has been restored.",
+      });
+    } catch (error) {
+      console.error("Error updating school:", error);
+      toast({
+        title: "Error",
+        description: "Failed to update school. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setActionLoading(null);
+      setConfirmDialog(null);
+    }
+  };
+
+  const handleToggleFee = async (schoolId: string, paid: boolean) => {
+    setActionLoading(schoolId);
+    try {
+      const { error } = await supabase
+        .from("schools")
+        .update({ fee_paid: paid })
+        .eq("id", schoolId);
+
+      if (error) throw error;
+
+      setSchools(prev => prev.map(s => 
+        s.id === schoolId ? { ...s, fee_paid: paid } : s
+      ));
+
+      toast({
+        title: paid ? "Fee Marked as Paid" : "Fee Marked as Unpaid",
+        description: paid ? "School can access the dashboard." : "School access has been suspended.",
+      });
+    } catch (error) {
+      console.error("Error updating fee status:", error);
+      toast({
+        title: "Error",
+        description: "Failed to update fee status. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setActionLoading(null);
+      setConfirmDialog(null);
+    }
+  };
+
+  const handleDeleteSchool = async (schoolId: string) => {
+    setActionLoading(schoolId);
+    try {
+      const { error } = await supabase
+        .from("schools")
+        .delete()
+        .eq("id", schoolId);
+
+      if (error) throw error;
+
+      setSchools(prev => prev.filter(s => s.id !== schoolId));
+
+      toast({
+        title: "School Deleted",
+        description: "School has been permanently removed.",
+      });
+    } catch (error) {
+      console.error("Error deleting school:", error);
+      toast({
+        title: "Error",
+        description: "Failed to delete school. It may have associated students.",
+        variant: "destructive",
+      });
+    } finally {
+      setActionLoading(null);
+      setConfirmDialog(null);
+    }
+  };
+
+  const handleBanStudent = async (studentId: string, ban: boolean) => {
+    setActionLoading(studentId);
+    try {
+      const { error } = await supabase
+        .from("students")
+        .update({ is_banned: ban })
+        .eq("id", studentId);
+
+      if (error) throw error;
+
+      setStudents(prev => prev.map(s => 
+        s.id === studentId ? { ...s, is_banned: ban } : s
+      ));
+
+      toast({
+        title: ban ? "Student Banned" : "Student Unbanned",
+        description: ban ? "Student can no longer access the platform." : "Student access has been restored.",
+      });
+    } catch (error) {
+      console.error("Error updating student:", error);
+      toast({
+        title: "Error",
+        description: "Failed to update student. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setActionLoading(null);
+      setConfirmDialog(null);
+    }
+  };
+
+  const handleDeleteStudent = async (studentId: string) => {
+    setActionLoading(studentId);
+    try {
+      const { error } = await supabase
+        .from("students")
+        .delete()
+        .eq("id", studentId);
+
+      if (error) throw error;
+
+      setStudents(prev => prev.filter(s => s.id !== studentId));
+
+      toast({
+        title: "Student Deleted",
+        description: "Student has been permanently removed.",
+      });
+    } catch (error) {
+      console.error("Error deleting student:", error);
+      toast({
+        title: "Error",
+        description: "Failed to delete student. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setActionLoading(null);
+      setConfirmDialog(null);
+    }
+  };
+
   const handleSendReport = async (studentId: string, parentWhatsapp: string) => {
     setSendingReportFor(studentId);
     try {
@@ -196,7 +387,6 @@ const AdminDashboard = () => {
       if (error) throw error;
 
       if (data?.success) {
-        // Save report record
         await supabase.from("parent_reports").insert({
           student_id: studentId,
           report_type: "manual",
@@ -249,7 +439,9 @@ const AdminDashboard = () => {
   const stats = {
     totalStudents: students.length,
     totalSchools: schools.length,
-    activeSchools: schools.filter((s) => s.studentCount > 0).length,
+    activeSchools: schools.filter((s) => s.studentCount > 0 && !s.is_banned && s.fee_paid).length,
+    bannedSchools: schools.filter((s) => s.is_banned).length,
+    unpaidSchools: schools.filter((s) => !s.fee_paid).length,
   };
 
   if (loading) {
@@ -289,7 +481,7 @@ const AdminDashboard = () => {
 
       <main className="container mx-auto px-4 py-8">
         {/* Stats */}
-        <div className="grid grid-cols-3 gap-4 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
           <div className="edu-card p-4 text-center">
             <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mx-auto mb-2">
               <Users className="w-6 h-6 text-primary" />
@@ -310,6 +502,20 @@ const AdminDashboard = () => {
             </div>
             <p className="text-2xl font-bold">{stats.activeSchools}</p>
             <p className="text-sm text-muted-foreground">Active Schools</p>
+          </div>
+          <div className="edu-card p-4 text-center">
+            <div className="w-12 h-12 rounded-xl bg-destructive/10 flex items-center justify-center mx-auto mb-2">
+              <Ban className="w-6 h-6 text-destructive" />
+            </div>
+            <p className="text-2xl font-bold">{stats.bannedSchools}</p>
+            <p className="text-sm text-muted-foreground">Banned</p>
+          </div>
+          <div className="edu-card p-4 text-center">
+            <div className="w-12 h-12 rounded-xl bg-warning/10 flex items-center justify-center mx-auto mb-2">
+              <DollarSign className="w-6 h-6 text-warning" />
+            </div>
+            <p className="text-2xl font-bold">{stats.unpaidSchools}</p>
+            <p className="text-sm text-muted-foreground">Unpaid Fees</p>
           </div>
         </div>
 
@@ -364,7 +570,7 @@ const AdminDashboard = () => {
                   Add School
                 </Button>
               </DialogTrigger>
-              <DialogContent>
+              <DialogContent className="max-w-md">
                 <DialogHeader>
                   <DialogTitle>Add New School</DialogTitle>
                 </DialogHeader>
@@ -391,7 +597,7 @@ const AdminDashboard = () => {
                       onClick={() => {
                         setShowAddSchool(false);
                         setGeneratedCredentials(null);
-                        setNewSchool({ name: "", district: "", state: "Bihar" });
+                        setNewSchool({ name: "", district: "", state: "Bihar", email: "", contact_whatsapp: "" });
                       }}
                     >
                       Done
@@ -426,6 +632,25 @@ const AdminDashboard = () => {
                         onChange={(e) => setNewSchool({ ...newSchool, state: e.target.value })}
                       />
                     </div>
+                    <div>
+                      <Label htmlFor="email">Email (for notifications)</Label>
+                      <Input
+                        id="email"
+                        type="email"
+                        placeholder="school@example.com"
+                        value={newSchool.email}
+                        onChange={(e) => setNewSchool({ ...newSchool, email: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="whatsapp">WhatsApp (for notifications)</Label>
+                      <Input
+                        id="whatsapp"
+                        placeholder="9876543210"
+                        value={newSchool.contact_whatsapp}
+                        onChange={(e) => setNewSchool({ ...newSchool, contact_whatsapp: e.target.value })}
+                      />
+                    </div>
                     <Button
                       className="w-full"
                       onClick={handleAddSchool}
@@ -458,21 +683,81 @@ const AdminDashboard = () => {
             </div>
             <div className="divide-y divide-border">
               {filteredSchools.map((school) => (
-                <div key={school.id} className="p-4 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center">
-                      <Building2 className="w-5 h-5 text-accent" />
+                <div key={school.id} className={`p-4 ${school.is_banned ? 'bg-destructive/5' : !school.fee_paid ? 'bg-warning/5' : ''}`}>
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${school.is_banned ? 'bg-destructive/10' : !school.fee_paid ? 'bg-warning/10' : 'bg-accent/10'}`}>
+                        <Building2 className={`w-5 h-5 ${school.is_banned ? 'text-destructive' : !school.fee_paid ? 'text-warning' : 'text-accent'}`} />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="font-semibold">{school.name}</p>
+                          {school.is_banned && (
+                            <span className="px-2 py-0.5 rounded-full bg-destructive/10 text-destructive text-xs font-medium">Banned</span>
+                          )}
+                          {!school.fee_paid && !school.is_banned && (
+                            <span className="px-2 py-0.5 rounded-full bg-warning/10 text-warning text-xs font-medium">Unpaid</span>
+                          )}
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          ID: {school.school_id} • {school.district || "N/A"} • {school.studentCount} students
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-semibold">{school.name}</p>
-                      <p className="text-sm text-muted-foreground">
-                        ID: {school.school_id} • {school.district || "N/A"}
-                      </p>
+                    <div className="flex items-center gap-2">
+                      {/* Fee Toggle */}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setConfirmDialog({
+                          open: true,
+                          type: "fee",
+                          entity: "school",
+                          id: school.id,
+                          name: school.name,
+                        })}
+                        disabled={actionLoading === school.id}
+                        className={school.fee_paid ? "text-accent" : "text-warning"}
+                      >
+                        <DollarSign className="w-4 h-4 mr-1" />
+                        {school.fee_paid ? "Paid" : "Unpaid"}
+                      </Button>
+                      
+                      {/* Ban/Unban */}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setConfirmDialog({
+                          open: true,
+                          type: school.is_banned ? "unban" : "ban",
+                          entity: "school",
+                          id: school.id,
+                          name: school.name,
+                        })}
+                        disabled={actionLoading === school.id}
+                        className={school.is_banned ? "text-accent" : "text-destructive"}
+                      >
+                        {school.is_banned ? <CheckCircle className="w-4 h-4 mr-1" /> : <Ban className="w-4 h-4 mr-1" />}
+                        {school.is_banned ? "Unban" : "Ban"}
+                      </Button>
+                      
+                      {/* Delete */}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setConfirmDialog({
+                          open: true,
+                          type: "delete",
+                          entity: "school",
+                          id: school.id,
+                          name: school.name,
+                        })}
+                        disabled={actionLoading === school.id}
+                        className="text-destructive hover:bg-destructive/10"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
                     </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-bold text-lg">{school.studentCount}</p>
-                    <p className="text-xs text-muted-foreground">Students</p>
                   </div>
                 </div>
               ))}
@@ -492,19 +777,72 @@ const AdminDashboard = () => {
             </div>
             <div className="divide-y divide-border">
               {filteredStudents.map((student) => (
-                <div key={student.id} className="p-4 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-lg font-bold">
-                      {student.full_name.charAt(0)}
+                <div key={student.id} className={`p-4 ${student.is_banned ? 'bg-destructive/5' : ''}`}>
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      {student.photo_url ? (
+                        <img 
+                          src={student.photo_url} 
+                          alt={student.full_name}
+                          className={`w-10 h-10 rounded-full object-cover border-2 ${student.is_banned ? 'border-destructive/30' : 'border-primary/20'}`}
+                        />
+                      ) : (
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold ${student.is_banned ? 'bg-destructive/10' : 'bg-primary/10'}`}>
+                          {student.full_name.charAt(0)}
+                        </div>
+                      )}
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="font-semibold">{student.full_name}</p>
+                          {student.is_banned && (
+                            <span className="px-2 py-0.5 rounded-full bg-destructive/10 text-destructive text-xs font-medium">Banned</span>
+                          )}
+                          {!student.is_approved && !student.is_banned && (
+                            <span className="px-2 py-0.5 rounded-full bg-warning/10 text-warning text-xs font-medium">Pending</span>
+                          )}
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          {student.class} • {student.school_name}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-semibold">{student.full_name}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {student.class} • {student.school_name}
-                      </p>
+                    <div className="flex items-center gap-2">
+                      {/* Ban/Unban */}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setConfirmDialog({
+                          open: true,
+                          type: student.is_banned ? "unban" : "ban",
+                          entity: "student",
+                          id: student.id,
+                          name: student.full_name,
+                        })}
+                        disabled={actionLoading === student.id}
+                        className={student.is_banned ? "text-accent" : "text-destructive"}
+                      >
+                        {student.is_banned ? <CheckCircle className="w-4 h-4 mr-1" /> : <Ban className="w-4 h-4 mr-1" />}
+                        {student.is_banned ? "Unban" : "Ban"}
+                      </Button>
+                      
+                      {/* Delete */}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setConfirmDialog({
+                          open: true,
+                          type: "delete",
+                          entity: "student",
+                          id: student.id,
+                          name: student.full_name,
+                        })}
+                        disabled={actionLoading === student.id}
+                        className="text-destructive hover:bg-destructive/10"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
                     </div>
                   </div>
-                  <p className="text-sm text-muted-foreground">{student.parent_whatsapp}</p>
                 </div>
               ))}
               {filteredStudents.length === 0 && (
@@ -525,7 +863,7 @@ const AdminDashboard = () => {
               </p>
             </div>
             <div className="divide-y divide-border">
-              {filteredStudents.map((student) => (
+              {filteredStudents.filter(s => !s.is_banned).map((student) => (
                 <div key={student.id} className="p-4 flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-lg font-bold">
@@ -555,7 +893,7 @@ const AdminDashboard = () => {
                   </Button>
                 </div>
               ))}
-              {filteredStudents.length === 0 && (
+              {filteredStudents.filter(s => !s.is_banned).length === 0 && (
                 <div className="p-8 text-center text-muted-foreground">
                   No students found.
                 </div>
@@ -573,7 +911,7 @@ const AdminDashboard = () => {
               </p>
             </div>
             <div className="divide-y divide-border">
-              {filteredStudents.map((student) => (
+              {filteredStudents.filter(s => !s.is_banned).map((student) => (
                 <div key={student.id} className="p-4 flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     {student.photo_url ? (
@@ -604,7 +942,7 @@ const AdminDashboard = () => {
                   </Button>
                 </div>
               ))}
-              {filteredStudents.length === 0 && (
+              {filteredStudents.filter(s => !s.is_banned).length === 0 && (
                 <div className="p-8 text-center text-muted-foreground">
                   No students found.
                 </div>
@@ -613,6 +951,57 @@ const AdminDashboard = () => {
           </div>
         )}
       </main>
+
+      {/* Confirmation Dialog */}
+      <AlertDialog open={confirmDialog?.open} onOpenChange={(open) => !open && setConfirmDialog(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-warning" />
+              Confirm Action
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmDialog?.type === "ban" && `Are you sure you want to ban ${confirmDialog.name}? They will lose access to the platform.`}
+              {confirmDialog?.type === "unban" && `Are you sure you want to unban ${confirmDialog.name}? They will regain access to the platform.`}
+              {confirmDialog?.type === "delete" && `Are you sure you want to permanently delete ${confirmDialog.name}? This action cannot be undone.`}
+              {confirmDialog?.type === "fee" && confirmDialog.entity === "school" && (
+                schools.find(s => s.id === confirmDialog.id)?.fee_paid
+                  ? `Mark ${confirmDialog.name}'s fee as unpaid? They will lose dashboard access.`
+                  : `Mark ${confirmDialog.name}'s fee as paid? They will regain dashboard access.`
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className={confirmDialog?.type === "delete" || confirmDialog?.type === "ban" ? "bg-destructive hover:bg-destructive/90" : ""}
+              onClick={() => {
+                if (!confirmDialog) return;
+                
+                if (confirmDialog.type === "ban") {
+                  if (confirmDialog.entity === "school") handleBanSchool(confirmDialog.id, true);
+                  else handleBanStudent(confirmDialog.id, true);
+                } else if (confirmDialog.type === "unban") {
+                  if (confirmDialog.entity === "school") handleBanSchool(confirmDialog.id, false);
+                  else handleBanStudent(confirmDialog.id, false);
+                } else if (confirmDialog.type === "delete") {
+                  if (confirmDialog.entity === "school") handleDeleteSchool(confirmDialog.id);
+                  else handleDeleteStudent(confirmDialog.id);
+                } else if (confirmDialog.type === "fee") {
+                  const school = schools.find(s => s.id === confirmDialog.id);
+                  if (school) handleToggleFee(confirmDialog.id, !school.fee_paid);
+                }
+              }}
+            >
+              {actionLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                "Confirm"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Student Report Modal */}
       {selectedStudent && (

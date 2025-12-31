@@ -17,9 +17,18 @@ import {
   UserX,
   Clock,
   Loader2,
+  AlertTriangle,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import StudentReportModal from "@/components/StudentReportModal";
 import { useToast } from "@/hooks/use-toast";
@@ -50,6 +59,14 @@ const SchoolDashboard = () => {
   const [showReportModal, setShowReportModal] = useState(false);
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("approved");
+  
+  // Fee payment check
+  const [feePaid, setFeePaid] = useState(true);
+  
+  // Rejection dialog state
+  const [showRejectDialog, setShowRejectDialog] = useState(false);
+  const [rejectingStudent, setRejectingStudent] = useState<StudentData | null>(null);
+  const [rejectionReason, setRejectionReason] = useState("");
 
   useEffect(() => {
     const storedSchoolName = localStorage.getItem("schoolName");
@@ -64,10 +81,10 @@ const SchoolDashboard = () => {
       setSchoolName(storedSchoolName);
     }
 
-    loadStudents();
+    checkSchoolAccess();
   }, [navigate]);
 
-  const loadStudents = async () => {
+  const checkSchoolAccess = async () => {
     try {
       const storedSchoolId = localStorage.getItem("schoolId");
       
@@ -76,10 +93,10 @@ const SchoolDashboard = () => {
         return;
       }
 
-      // Get the school UUID from schools table using the stored school_id
+      // Check if school is banned or fee not paid
       const { data: school } = await supabase
         .from("schools")
-        .select("id")
+        .select("id, is_banned, fee_paid")
         .eq("school_id", storedSchoolId)
         .maybeSingle();
 
@@ -88,13 +105,46 @@ const SchoolDashboard = () => {
         return;
       }
 
+      if (school.is_banned) {
+        toast({
+          title: "Access Denied",
+          description: "Your school has been banned. Please contact admin.",
+          variant: "destructive",
+        });
+        localStorage.clear();
+        navigate("/school-login");
+        return;
+      }
+
+      if (!school.fee_paid) {
+        setFeePaid(false);
+        setLoading(false);
+        return;
+      }
+
       setSchoolUuid(school.id);
+      loadStudents(school.id);
+    } catch (error) {
+      console.error("Error checking school access:", error);
+      setLoading(false);
+    }
+  };
+
+  const loadStudents = async (schoolId?: string) => {
+    try {
+      const id = schoolId || schoolUuid;
+      
+      if (!id) {
+        setLoading(false);
+        return;
+      }
 
       // Get students ONLY for this specific school
       const { data: studentsData } = await supabase
         .from("students")
         .select("*")
-        .eq("school_id", school.id)
+        .eq("school_id", id)
+        .eq("is_banned", false)
         .order("created_at", { ascending: false });
 
       if (studentsData) {
@@ -157,6 +207,7 @@ const SchoolDashboard = () => {
         .update({ 
           is_approved: true, 
           approved_at: new Date().toISOString(),
+          rejection_reason: null,
         })
         .eq("id", studentId);
 
@@ -183,24 +234,38 @@ const SchoolDashboard = () => {
     }
   };
 
-  const handleRejectStudent = async (studentId: string) => {
-    setApprovingId(studentId);
+  const openRejectDialog = (student: StudentData) => {
+    setRejectingStudent(student);
+    setRejectionReason("");
+    setShowRejectDialog(true);
+  };
+
+  const handleRejectStudent = async () => {
+    if (!rejectingStudent) return;
+    
+    setApprovingId(rejectingStudent.id);
     try {
-      // For now, we'll just set is_approved to false (could delete in future)
       const { error } = await supabase
         .from("students")
-        .update({ is_approved: false })
-        .eq("id", studentId);
+        .update({ 
+          is_approved: false,
+          rejection_reason: rejectionReason.trim() || "No reason provided",
+        })
+        .eq("id", rejectingStudent.id);
 
       if (error) throw error;
 
       // Remove from local state
-      setStudents(prev => prev.filter(s => s.id !== studentId));
+      setStudents(prev => prev.filter(s => s.id !== rejectingStudent.id));
 
       toast({
         title: "Student Rejected",
-        description: "Student request has been rejected.",
+        description: "Student request has been rejected with reason.",
       });
+      
+      setShowRejectDialog(false);
+      setRejectingStudent(null);
+      setRejectionReason("");
     } catch (error) {
       console.error("Error rejecting student:", error);
       toast({
@@ -270,6 +335,30 @@ const SchoolDashboard = () => {
             <Building2 className="w-6 h-6 text-accent-foreground" />
           </div>
           <p className="text-muted-foreground">Loading dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Fee not paid screen
+  if (!feePaid) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <div className="edu-card p-8 max-w-md text-center">
+          <div className="w-16 h-16 rounded-xl bg-destructive/10 flex items-center justify-center mx-auto mb-6">
+            <AlertTriangle className="w-8 h-8 text-destructive" />
+          </div>
+          <h1 className="text-2xl font-bold mb-4">Access Suspended</h1>
+          <p className="text-muted-foreground mb-6">
+            Your school's dashboard access has been suspended due to unpaid fees. 
+            Please contact the admin to resolve this issue.
+          </p>
+          <div className="space-y-3">
+            <Button variant="outline" className="w-full" onClick={handleLogout}>
+              <LogOut className="w-4 h-4 mr-2" />
+              Logout
+            </Button>
+          </div>
         </div>
       </div>
     );
@@ -398,7 +487,7 @@ const SchoolDashboard = () => {
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => handleRejectStudent(student.id)}
+                            onClick={() => openRejectDialog(student)}
                             disabled={approvingId === student.id}
                             className="text-destructive hover:text-destructive hover:bg-destructive/10"
                           >
@@ -601,6 +690,44 @@ const SchoolDashboard = () => {
           </TabsContent>
         </Tabs>
       </main>
+
+      {/* Rejection Reason Dialog */}
+      <Dialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reject Student Registration</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <p className="text-sm text-muted-foreground">
+              You are about to reject <strong>{rejectingStudent?.name}</strong>'s registration. 
+              Please provide a reason (optional):
+            </p>
+            <Textarea
+              placeholder="Enter reason for rejection (e.g., Invalid details, Not a student of this school, etc.)"
+              value={rejectionReason}
+              onChange={(e) => setRejectionReason(e.target.value)}
+              rows={3}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowRejectDialog(false)}>
+              Cancel
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={handleRejectStudent}
+              disabled={approvingId === rejectingStudent?.id}
+            >
+              {approvingId === rejectingStudent?.id ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              ) : (
+                <UserX className="w-4 h-4 mr-2" />
+              )}
+              Reject Student
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Student Report Modal */}
       {selectedStudent && (
