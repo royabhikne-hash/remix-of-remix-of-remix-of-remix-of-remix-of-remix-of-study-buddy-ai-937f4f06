@@ -9,6 +9,7 @@ import {
   LogOut,
   Play,
   CheckCircle,
+  XCircle,
   User,
   BarChart3,
   MessageCircle,
@@ -52,6 +53,7 @@ const StudentDashboard = () => {
   const [parentWhatsapp, setParentWhatsapp] = useState<string | null>(null);
   const [sendingReport, setSendingReport] = useState(false);
   const [isApproved, setIsApproved] = useState<boolean | null>(null);
+  const [rejectionReason, setRejectionReason] = useState<string | null>(null);
   const [schoolName, setSchoolName] = useState<string>("");
   
   const [stats, setStats] = useState({
@@ -121,6 +123,7 @@ const StudentDashboard = () => {
         setStudentId(student.id);
         setParentWhatsapp(student.parent_whatsapp);
         setIsApproved(student.is_approved);
+        setRejectionReason(student.rejection_reason || null);
         setSchoolName((student.schools as any)?.name || "Your School");
         
         // Only load sessions if approved
@@ -332,27 +335,54 @@ const StudentDashboard = () => {
     );
   }
 
-  // Show pending approval screen
+  // Show pending approval or rejection screen
   if (isApproved === false) {
+    const isRejected = rejectionReason !== null;
+    
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <div className="edu-card p-8 max-w-md text-center">
-          <div className="w-20 h-20 rounded-full bg-warning/20 flex items-center justify-center mx-auto mb-6">
-            <Clock className="w-10 h-10 text-warning" />
+          <div className={`w-20 h-20 rounded-full ${isRejected ? 'bg-destructive/20' : 'bg-warning/20'} flex items-center justify-center mx-auto mb-6`}>
+            {isRejected ? (
+              <XCircle className="w-10 h-10 text-destructive" />
+            ) : (
+              <Clock className="w-10 h-10 text-warning" />
+            )}
           </div>
-          <h1 className="text-2xl font-bold mb-2">Approval Pending</h1>
+          <h1 className="text-2xl font-bold mb-2">
+            {isRejected ? "Registration Rejected" : "Approval Pending"}
+          </h1>
           <p className="text-muted-foreground mb-4">
             Namaste {userName}! 👋
           </p>
-          <p className="text-muted-foreground mb-6">
-            Aapka account abhi <strong>{schoolName}</strong> se approve hona baaki hai. 
-            Jab school aapko approve kar dega, tab aap study kar paoge.
-          </p>
-          <div className="bg-secondary/50 rounded-xl p-4 mb-6">
-            <p className="text-sm text-muted-foreground">
-              🔔 School ko inform kar diya gaya hai. Thoda wait karo!
-            </p>
-          </div>
+          
+          {isRejected ? (
+            <>
+              <p className="text-muted-foreground mb-4">
+                Aapki registration <strong>{schoolName}</strong> ne reject kar di hai.
+              </p>
+              <div className="bg-destructive/10 border border-destructive/20 rounded-xl p-4 mb-6">
+                <p className="text-sm font-medium text-destructive mb-1">Rejection Reason:</p>
+                <p className="text-sm text-foreground">{rejectionReason}</p>
+              </div>
+              <p className="text-sm text-muted-foreground mb-6">
+                Agar aapko lagta hai ye galti se hua hai, toh school se contact karo.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-muted-foreground mb-6">
+                Aapka account abhi <strong>{schoolName}</strong> se approve hona baaki hai. 
+                Jab school aapko approve kar dega, tab aap study kar paoge.
+              </p>
+              <div className="bg-secondary/50 rounded-xl p-4 mb-6">
+                <p className="text-sm text-muted-foreground">
+                  🔔 School ko inform kar diya gaya hai. Thoda wait karo!
+                </p>
+              </div>
+            </>
+          )}
+          
           <Button variant="outline" onClick={handleLogout} className="w-full">
             <LogOut className="w-4 h-4 mr-2" />
             Logout
