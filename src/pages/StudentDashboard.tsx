@@ -74,6 +74,37 @@ const StudentDashboard = () => {
     }
   }, [user, loading, navigate]);
 
+  // Real-time subscription for approval status changes
+  useEffect(() => {
+    if (!studentId) return;
+
+    const channel = supabase
+      .channel('student-approval')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'students',
+          filter: `id=eq.${studentId}`,
+        },
+        (payload) => {
+          console.log('Student data updated:', payload);
+          if (payload.new && 'is_approved' in payload.new) {
+            setIsApproved(payload.new.is_approved as boolean);
+            if (payload.new.is_approved) {
+              loadStudentData(); // Reload full data when approved
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [studentId]);
+
   const loadStudentData = async () => {
     if (!user) return;
 
