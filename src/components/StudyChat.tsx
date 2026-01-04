@@ -1,9 +1,36 @@
-import { useState, useRef, useEffect } from "react";
-import { Send, Image, X, Loader2, Brain, TrendingUp, AlertTriangle, Volume2, VolumeX, CheckCircle, XCircle, ThumbsUp, HelpCircle, Lightbulb, Bot, User } from "lucide-react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { Send, Image, X, Loader2, Brain, TrendingUp, AlertTriangle, Volume2, VolumeX, CheckCircle, XCircle, ThumbsUp, HelpCircle, Lightbulb, Bot, User, Mic, MicOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+
+// Web Speech API types
+interface SpeechRecognitionEvent extends Event {
+  results: SpeechRecognitionResultList;
+}
+
+interface SpeechRecognitionErrorEvent extends Event {
+  error: string;
+}
+
+interface SpeechRecognitionType {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  start: () => void;
+  stop: () => void;
+  onresult: (event: SpeechRecognitionEvent) => void;
+  onend: () => void;
+  onerror: (event: SpeechRecognitionErrorEvent) => void;
+}
+
+declare global {
+  interface Window {
+    SpeechRecognition: new () => SpeechRecognitionType;
+    webkitSpeechRecognition: new () => SpeechRecognitionType;
+  }
+}
 
 type ReactionType = "like" | "helpful" | "confusing";
 
@@ -98,8 +125,68 @@ const StudyChat = ({ onEndStudy, studentId }: StudyChatProps) => {
   // Message reactions state
   const [messageReactions, setMessageReactions] = useState<Record<string, Record<ReactionType, MessageReaction>>>({});
   
+  // Voice input state
+  const [isListening, setIsListening] = useState(false);
+  const [speechSupported, setSpeechSupported] = useState(false);
+  const recognitionRef = useRef<SpeechRecognitionType | null>(null);
+  
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Check for speech recognition support
+  useEffect(() => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      setSpeechSupported(true);
+      const recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = true;
+      recognition.lang = 'hi-IN'; // Hindi-India for Hinglish support
+      
+      recognition.onresult = (event) => {
+        const transcript = Array.from(event.results)
+          .map(result => result[0].transcript)
+          .join('');
+        setInputValue(transcript);
+      };
+      
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+      
+      recognition.onerror = (event) => {
+        console.error('Speech recognition error:', event.error);
+        setIsListening(false);
+        if (event.error === 'not-allowed') {
+          toast({
+            title: "Microphone Access Denied",
+            description: "Please allow microphone access to use voice input.",
+            variant: "destructive"
+          });
+        }
+      };
+      
+      recognitionRef.current = recognition;
+    }
+  }, [toast]);
+
+  const toggleListening = useCallback(() => {
+    if (!recognitionRef.current) return;
+    
+    if (isListening) {
+      recognitionRef.current.stop();
+      setIsListening(false);
+    } else {
+      setInputValue('');
+      recognitionRef.current.start();
+      setIsListening(true);
+      toast({
+        title: "🎤 Listening...",
+        description: "Speak now - I'm listening!",
+        duration: 2000
+      });
+    }
+  }, [isListening, toast]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -847,7 +934,7 @@ const StudyChat = ({ onEndStudy, studentId }: StudyChatProps) => {
         </div>
       )}
 
-      {/* ChatGPT-style Input - Clean rounded pill */}
+      {/* ChatGPT-style Input - Clean rounded pill with voice input */}
       {!isQuizMode && (
         <div className="border-t border-border/50 bg-background p-3">
           <div className="max-w-2xl mx-auto">
@@ -867,13 +954,30 @@ const StudyChat = ({ onEndStudy, studentId }: StudyChatProps) => {
               >
                 <Image className="w-4 h-4" />
               </Button>
+              
+              {/* Voice Input Button */}
+              {speechSupported && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={toggleListening}
+                  className={`shrink-0 h-8 w-8 rounded-full transition-colors ${
+                    isListening 
+                      ? "bg-destructive/20 text-destructive hover:bg-destructive/30" 
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  }`}
+                >
+                  {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                </Button>
+              )}
+              
               <Input
-                placeholder="Message..."
+                placeholder={isListening ? "Listening..." : "Message..."}
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyPress={handleKeyPress}
                 className="flex-1 border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 px-0 h-8 text-sm"
-                disabled={isLoading}
+                disabled={isLoading || isListening}
               />
               <Button
                 size="icon"
@@ -884,6 +988,11 @@ const StudyChat = ({ onEndStudy, studentId }: StudyChatProps) => {
                 {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
               </Button>
             </div>
+            {isListening && (
+              <p className="text-xs text-center text-muted-foreground mt-2 animate-pulse">
+                🎤 Bol dijiye... main sun raha hoon
+              </p>
+            )}
           </div>
         </div>
       )}
