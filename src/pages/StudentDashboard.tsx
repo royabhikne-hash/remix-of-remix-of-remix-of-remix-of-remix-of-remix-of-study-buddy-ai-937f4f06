@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import StudyChat from "@/components/StudyChat";
 import ChatHistory from "@/components/ChatHistory";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -480,17 +481,18 @@ const StudentDashboard = () => {
                 <p className="text-xs text-muted-foreground">Student Dashboard</p>
               </div>
             </div>
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center">
-                  <User className="w-4 h-4" />
+              <div className="flex items-center gap-3">
+                <ThemeToggle />
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center">
+                    <User className="w-4 h-4" />
+                  </div>
+                  <span className="font-medium hidden sm:block">{userName}</span>
                 </div>
-                <span className="font-medium hidden sm:block">{userName}</span>
+                <Button variant="ghost" size="icon" onClick={handleLogout}>
+                  <LogOut className="w-5 h-5" />
+                </Button>
               </div>
-              <Button variant="ghost" size="icon" onClick={handleLogout}>
-                <LogOut className="w-5 h-5" />
-              </Button>
-            </div>
           </div>
         </div>
       </header>

@@ -1,6 +1,7 @@
 import { BookOpen, Users, GraduationCap, MessageCircle, TrendingUp, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 const Landing = () => {
   const navigate = useNavigate();
@@ -16,7 +17,8 @@ const Landing = () => {
             </div>
             <span className="text-xl font-bold text-foreground">Edu improvement AI</span>
           </div>
-          <div className="flex gap-3">
+          <div className="flex items-center gap-3">
+            <ThemeToggle />
             <Button variant="ghost" onClick={() => navigate("/login")}>
               Login
             </Button>
