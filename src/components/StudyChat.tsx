@@ -136,6 +136,21 @@ const StudyChat = ({ onEndStudy, studentId }: StudyChatProps) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Load voices when available
+  useEffect(() => {
+    const loadVoices = () => {
+      const voices = window.speechSynthesis.getVoices();
+      console.log('Available voices:', voices.map(v => `${v.name} (${v.lang})`));
+    };
+    
+    loadVoices();
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+    
+    return () => {
+      window.speechSynthesis.onvoiceschanged = null;
+    };
+  }, []);
+
   // Check for speech recognition support
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -150,10 +165,12 @@ const StudyChat = ({ onEndStudy, studentId }: StudyChatProps) => {
         const transcript = Array.from(event.results)
           .map(result => result[0].transcript)
           .join('');
+        console.log('Speech recognized:', transcript);
         setInputValue(transcript);
       };
       
       recognition.onend = () => {
+        console.log('Speech recognition ended');
         setIsListening(false);
       };
       
@@ -163,31 +180,58 @@ const StudyChat = ({ onEndStudy, studentId }: StudyChatProps) => {
         if (event.error === 'not-allowed') {
           toast({
             title: "Microphone Access Denied",
-            description: "Please allow microphone access to use voice input.",
+            description: "Microphone use karne ke liye permission do.",
             variant: "destructive"
+          });
+        } else if (event.error === 'no-speech') {
+          toast({
+            title: "Kuch sunai nahi diya",
+            description: "Phir se bolke try karo.",
           });
         }
       };
       
       recognitionRef.current = recognition;
+    } else {
+      console.log('Speech recognition not supported');
     }
   }, [toast]);
 
   const toggleListening = useCallback(() => {
-    if (!recognitionRef.current) return;
+    if (!recognitionRef.current) {
+      toast({
+        title: "Not Supported",
+        description: "Aapka browser voice input support nahi karta. Chrome use karo.",
+        variant: "destructive"
+      });
+      return;
+    }
     
     if (isListening) {
       recognitionRef.current.stop();
       setIsListening(false);
     } else {
+      // Stop any ongoing speech first
+      window.speechSynthesis.cancel();
+      setSpeakingMessageId(null);
+      
       setInputValue('');
-      recognitionRef.current.start();
-      setIsListening(true);
-      toast({
-        title: "🎤 Listening...",
-        description: "Speak now - I'm listening!",
-        duration: 2000
-      });
+      try {
+        recognitionRef.current.start();
+        setIsListening(true);
+        toast({
+          title: "🎤 Bol raha hun...",
+          description: "Ab bolo - main sun raha hun!",
+          duration: 2000
+        });
+      } catch (error) {
+        console.error('Error starting recognition:', error);
+        toast({
+          title: "Error",
+          description: "Voice input start nahi ho paya. Refresh karke try karo.",
+          variant: "destructive"
+        });
+      }
     }
   }, [isListening, toast]);
 
