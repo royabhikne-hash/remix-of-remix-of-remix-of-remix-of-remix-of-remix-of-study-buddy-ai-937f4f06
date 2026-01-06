@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import SoundWave from "@/components/SoundWave";
 
 // Web Speech API types
 interface SpeechRecognitionEvent extends Event {
@@ -106,6 +107,7 @@ const StudyChat = ({ onEndStudy, studentId }: StudyChatProps) => {
   const [showAnalysis, setShowAnalysis] = useState(false);
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
   const [voiceSpeed, setVoiceSpeed] = useState(1.0);
+  const [autoSpeak, setAutoSpeak] = useState(true); // Auto-speak enabled by default
   
   // Quiz mode state
   const [isQuizMode, setIsQuizMode] = useState(false);
@@ -493,6 +495,13 @@ const StudyChat = ({ onEndStudy, studentId }: StudyChatProps) => {
     }
     
     setIsLoading(false);
+    
+    // Auto-speak AI response
+    if (autoSpeak && aiResponseText) {
+      setTimeout(() => {
+        speakText(aiResponseText, aiResponse.id);
+      }, 300);
+    }
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -693,22 +702,36 @@ const StudyChat = ({ onEndStudy, studentId }: StudyChatProps) => {
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-56 p-4" align="end">
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">Voice Speed</span>
-                  <span className="text-sm text-muted-foreground">{voiceSpeed}x</span>
+              <div className="space-y-4">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">Voice Speed</span>
+                    <span className="text-sm text-muted-foreground">{voiceSpeed}x</span>
+                  </div>
+                  <Slider
+                    value={[voiceSpeed]}
+                    onValueChange={(val) => setVoiceSpeed(val[0])}
+                    min={0.5}
+                    max={1.5}
+                    step={0.1}
+                    className="w-full"
+                  />
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>Slow</span>
+                    <span>Fast</span>
+                  </div>
                 </div>
-                <Slider
-                  value={[voiceSpeed]}
-                  onValueChange={(val) => setVoiceSpeed(val[0])}
-                  min={0.5}
-                  max={1.5}
-                  step={0.1}
-                  className="w-full"
-                />
-                <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>Slow</span>
-                  <span>Fast</span>
+                <div className="border-t border-border pt-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">Auto-speak</span>
+                    <button
+                      onClick={() => setAutoSpeak(!autoSpeak)}
+                      className={`w-10 h-5 rounded-full transition-colors relative ${autoSpeak ? 'bg-primary' : 'bg-muted'}`}
+                    >
+                      <span className={`absolute w-4 h-4 rounded-full bg-white top-0.5 transition-all ${autoSpeak ? 'left-5' : 'left-0.5'}`} />
+                    </button>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">Auto read AI responses</p>
                 </div>
               </div>
             </PopoverContent>
@@ -809,11 +832,14 @@ const StudyChat = ({ onEndStudy, studentId }: StudyChatProps) => {
                     <div className="flex items-center gap-1 mt-3">
                       <button
                         onClick={() => speakText(message.content, message.id)}
-                        className="p-1.5 rounded hover:bg-muted transition-colors"
-                        title="Read aloud"
+                        className="p-1.5 rounded hover:bg-muted transition-colors flex items-center gap-1"
+                        title={speakingMessageId === message.id ? "Stop speaking" : "Read aloud"}
                       >
                         {speakingMessageId === message.id ? (
-                          <VolumeX className="w-4 h-4 text-primary" />
+                          <>
+                            <VolumeX className="w-4 h-4 text-primary" />
+                            <SoundWave isActive={true} className="ml-1" />
+                          </>
                         ) : (
                           <Volume2 className="w-4 h-4 text-muted-foreground hover:text-foreground" />
                         )}

@@ -9,20 +9,20 @@ const Landing = () => {
   return (
     <div className="min-h-screen hero-gradient">
       {/* Header */}
-      <header className="container mx-auto py-6 px-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
-              <BookOpen className="w-6 h-6 text-primary-foreground" />
+      <header className="container mx-auto py-4 px-4">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-primary flex items-center justify-center flex-shrink-0">
+              <BookOpen className="w-5 h-5 sm:w-6 sm:h-6 text-primary-foreground" />
             </div>
-            <span className="text-xl font-bold text-foreground">Edu improvement AI</span>
+            <span className="text-base sm:text-xl font-bold text-foreground truncate">EduImprove AI</span>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 sm:gap-3 flex-shrink-0">
             <ThemeToggle />
-            <Button variant="ghost" onClick={() => navigate("/login")}>
+            <Button variant="ghost" size="sm" onClick={() => navigate("/login")} className="hidden sm:flex">
               Login
             </Button>
-            <Button variant="hero" onClick={() => navigate("/signup")}>
+            <Button variant="hero" size="sm" onClick={() => navigate("/signup")} className="text-xs sm:text-sm px-3 sm:px-4">
               Get Started
             </Button>
           </div>
