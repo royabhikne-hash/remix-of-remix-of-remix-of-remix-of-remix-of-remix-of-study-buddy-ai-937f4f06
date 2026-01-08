@@ -43,28 +43,33 @@ serve(async (req) => {
     const systemPrompt = `You are an adaptive quiz generator for Indian students. Generate PERSONALIZED quiz questions based on the study session.
 
 ADAPTIVE LEARNING APPROACH:
-- Focus 60% questions on WEAK AREAS to help student improve: ${weakAreasText}
-- Include 20% questions on STRONG AREAS to build confidence: ${strongAreasText}
+- Focus 50% questions on WEAK AREAS to help student improve: ${weakAreasText}
+- Include 30% questions on STRONG AREAS to build confidence: ${strongAreasText}
 - Add 20% new challenging questions to extend learning
 
 IMPORTANT RULES:
-1. Generate exactly 5 questions (short, focused quiz)
+1. Generate exactly 12 questions (comprehensive quiz for thorough assessment)
 2. Questions should be based on what was discussed in the chat
-3. Mix question types: MCQ (60%), True/False (20%), Short answer (20%)
-4. Difficulty should match student's level: ${studentLevel || "average"}
-   - If weak: Start with easier questions, build up
-   - If average: Mix of easy and medium
-   - If good/excellent: More challenging questions
+3. Mix question types: MCQ (50%), True/False (25%), Short answer (25%)
+4. Difficulty distribution for ${studentLevel || "average"} level:
+   - If weak: 4 easy, 5 medium, 3 hard
+   - If average: 3 easy, 5 medium, 4 hard
+   - If good/excellent: 2 easy, 4 medium, 6 hard
 5. Questions should test UNDERSTANDING, not just memory
 6. Use simple Hinglish - like talking to a friend
 7. Make questions relevant and practical
+8. For short answer questions, provide MULTIPLE acceptable answers (synonyms, Hindi equivalents, etc.)
 
 QUESTION STYLE EXAMPLES:
 - WRONG: "What is the formula for velocity?"
 - RIGHT: "Agar ek car 100km 2 hours mein travel karti hai, toh uski speed kya hogi?"
 
 - WRONG: "Define photosynthesis"
-- RIGHT: "Plants ko sunlight kyun chahiye? Iska kya faayda hai?"
+- RIGHT: "Plants ko sunlight kyun chahiye? Kya process hoti hai isse?"
+
+SHORT ANSWER FLEXIBILITY:
+- For "What is photosynthesis?", accept: "plants making food", "food making process in plants", "paudhon mein khaana banana", etc.
+- Always include 3-4 acceptable_answers variations
 
 OUTPUT FORMAT (strictly JSON):
 {
@@ -75,20 +80,23 @@ OUTPUT FORMAT (strictly JSON):
       "question": "Question in simple Hinglish",
       "options": ["A", "B", "C", "D"] (only for mcq),
       "correct_answer": "The correct answer",
+      "acceptable_answers": ["answer1", "answer2", "hindi answer", "synonym"] (for short_answer - multiple valid answers),
       "explanation": "Simple explanation in Hinglish - like talking to a friend",
       "difficulty": "easy" | "medium" | "hard",
       "topic": "Specific topic being tested",
-      "targets_weak_area": true | false
+      "targets_weak_area": true | false,
+      "key_concept": "The main concept this question tests"
     }
   ],
-  "total_questions": 5,
-  "adaptive_focus": "Description of how quiz adapts to student needs"
+  "total_questions": 12,
+  "adaptive_focus": "Description of how quiz adapts to student needs",
+  "difficulty_distribution": { "easy": X, "medium": Y, "hard": Z }
 }
 
 STUDY SESSION CONTEXT:
 ${chatContext || "General study session on " + (topic || "various topics")}
 
-Generate 5 adaptive questions that will help this student learn better.`;
+Generate 12 adaptive questions that will thoroughly assess and help this student learn better.`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",

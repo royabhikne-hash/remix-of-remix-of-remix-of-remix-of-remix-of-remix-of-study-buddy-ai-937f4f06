@@ -69,9 +69,18 @@ interface QuizQuestion {
   question: string;
   options?: string[];
   correct_answer: string;
+  acceptable_answers?: string[];
   explanation: string;
   difficulty: string;
   topic: string;
+  key_concept?: string;
+}
+
+interface AnswerAnalysis {
+  isCorrect: boolean;
+  confidence: number;
+  reasoning: string;
+  feedback: string;
 }
 
 interface StudyChatProps {
@@ -125,6 +134,9 @@ const StudyChat = ({ onEndStudy, studentId }: StudyChatProps) => {
   const [showConfetti, setShowConfetti] = useState(false);
   const [hasPlayedWelcome, setHasPlayedWelcome] = useState(false);
   const [typingMessageId, setTypingMessageId] = useState<string | null>(null);
+  const [answerResults, setAnswerResults] = useState<AnswerAnalysis[]>([]);
+  const [analyzingAnswer, setAnalyzingAnswer] = useState(false);
+  const [shortAnswerInput, setShortAnswerInput] = useState("");
   
   // Real-time analysis state
   const [analysis, setAnalysis] = useState<RealTimeAnalysis>({
@@ -576,6 +588,8 @@ const StudyChat = ({ onEndStudy, studentId }: StudyChatProps) => {
         setIsQuizMode(true);
         setCurrentQuestionIndex(0);
         setUserAnswers([]);
+        setAnswerResults([]);
+        setShortAnswerInput("");
         
         // Adaptive intro message based on student's performance
         const hasWeakAreas = analysis.weakAreas.length > 0;
@@ -606,12 +620,75 @@ const StudyChat = ({ onEndStudy, studentId }: StudyChatProps) => {
     }
   };
 
-  const handleQuizAnswer = (answer: string) => {
+  const analyzeAnswerWithAI = async (question: QuizQuestion, answer: string): Promise<AnswerAnalysis> => {
+    // For MCQ and True/False, do simple matching first
+    if (question.type === "mcq" || question.type === "true_false") {
+      const isCorrect = answer.toLowerCase().trim() === question.correct_answer.toLowerCase().trim();
+      return {
+        isCorrect,
+        confidence: 100,
+        reasoning: isCorrect ? "Sahi option select kiya" : "Galat option select kiya",
+        feedback: isCorrect ? "🎉 Sahi jawab!" : "❌ Galat jawab"
+      };
+    }
+
+    // For short answer, use AI analysis
+    try {
+      const { data, error } = await supabase.functions.invoke('analyze-answer', {
+        body: {
+          question: question.question,
+          correctAnswer: question.correct_answer,
+          studentAnswer: answer,
+          topic: question.topic,
+          questionType: question.type
+        }
+      });
+
+      if (error) throw error;
+
+      return {
+        isCorrect: data.isCorrect ?? false,
+        confidence: data.confidence ?? 80,
+        reasoning: data.reasoning ?? "Analysis completed",
+        feedback: data.feedback ?? (data.isCorrect ? "Sahi!" : "Galat")
+      };
+    } catch (err) {
+      console.error("Answer analysis error:", err);
+      // Fallback to checking acceptable_answers
+      const userAnswer = answer.toLowerCase().trim();
+      const correctAnswer = question.correct_answer.toLowerCase().trim();
+      const acceptableAnswers = question.acceptable_answers?.map(a => a.toLowerCase().trim()) || [];
+      
+      const isCorrect = userAnswer === correctAnswer || acceptableAnswers.includes(userAnswer);
+      return {
+        isCorrect,
+        confidence: 70,
+        reasoning: "Simple matching used",
+        feedback: isCorrect ? "🎉 Sahi jawab!" : "❌ Answer match nahi hua"
+      };
+    }
+  };
+
+  const handleQuizAnswer = async (answer: string) => {
     setSelectedOption(answer);
-    setShowExplanation(true);
+    setAnalyzingAnswer(true);
     
-    const newAnswers = [...userAnswers, answer];
-    setUserAnswers(newAnswers);
+    const currentQuestion = quizQuestions[currentQuestionIndex];
+    
+    // Analyze the answer with AI for short answers
+    const analysisResult = await analyzeAnswerWithAI(currentQuestion, answer);
+    
+    setAnswerResults(prev => [...prev, analysisResult]);
+    setUserAnswers(prev => [...prev, answer]);
+    setShowExplanation(true);
+    setAnalyzingAnswer(false);
+  };
+
+  const handleShortAnswerSubmit = () => {
+    if (shortAnswerInput.trim()) {
+      handleQuizAnswer(shortAnswerInput.trim());
+      setShortAnswerInput("");
+    }
   };
 
   const handleNextQuestion = () => {
@@ -626,16 +703,8 @@ const StudyChat = ({ onEndStudy, studentId }: StudyChatProps) => {
   };
 
   const calculateQuizResults = () => {
-    let correctCount = 0;
-    quizQuestions.forEach((q, i) => {
-      const userAnswer = userAnswers[i]?.toLowerCase().trim();
-      const correctAnswer = q.correct_answer?.toLowerCase().trim();
-      if (userAnswer === correctAnswer || 
-          (q.options && q.options.indexOf(userAnswers[i]) === q.options.map(o => o.toLowerCase()).indexOf(correctAnswer))) {
-        correctCount++;
-      }
-    });
-
+    // Use AI analysis results
+    const correctCount = answerResults.filter(r => r.isCorrect).length;
     const accuracy = Math.round((correctCount / quizQuestions.length) * 100);
     let understanding: "strong" | "partial" | "weak";
     
@@ -1011,33 +1080,83 @@ const StudyChat = ({ onEndStudy, studentId }: StudyChatProps) => {
                 )}
 
                 {(currentQuestion.type === "fill_blank" || currentQuestion.type === "short_answer") && !showExplanation && (
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="Type your answer..."
-                      value={selectedOption || ""}
-                      onChange={(e) => setSelectedOption(e.target.value)}
-                      onKeyPress={(e) => {
-                        if (e.key === "Enter" && selectedOption) {
-                          handleQuizAnswer(selectedOption);
-                        }
-                      }}
-                      className="rounded-xl"
-                    />
-                    <Button onClick={() => selectedOption && handleQuizAnswer(selectedOption)} disabled={!selectedOption} className="rounded-xl">
-                      Submit
-                    </Button>
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="Apna jawab yahan likho..."
+                        value={shortAnswerInput}
+                        onChange={(e) => setShortAnswerInput(e.target.value)}
+                        onKeyPress={(e) => {
+                          if (e.key === "Enter" && shortAnswerInput.trim()) {
+                            handleShortAnswerSubmit();
+                          }
+                        }}
+                        className="rounded-xl"
+                        disabled={analyzingAnswer}
+                      />
+                      <Button 
+                        onClick={handleShortAnswerSubmit} 
+                        disabled={!shortAnswerInput.trim() || analyzingAnswer} 
+                        className="rounded-xl"
+                      >
+                        {analyzingAnswer ? <Loader2 className="w-4 h-4 animate-spin" /> : "Submit"}
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      💡 Apne words mein likho - AI samajhkar check karega
+                    </p>
                   </div>
                 )}
 
-                {showExplanation && (
-                  <div className="mt-4 p-3 bg-muted/50 rounded-xl">
-                    <p className="text-sm font-medium mb-1">Answer: {currentQuestion.correct_answer}</p>
-                    <p className="text-sm text-muted-foreground">{currentQuestion.explanation}</p>
+                {/* Analyzing indicator */}
+                {analyzingAnswer && (
+                  <div className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                    <span>AI tumhara answer analyze kar raha hai...</span>
+                  </div>
+                )}
+
+                {showExplanation && answerResults[currentQuestionIndex] && (
+                  <div className="mt-4 space-y-3">
+                    {/* AI Analysis Result */}
+                    <div className={`p-3 rounded-xl ${
+                      answerResults[currentQuestionIndex].isCorrect 
+                        ? "bg-accent/10 border border-accent/30" 
+                        : "bg-destructive/10 border border-destructive/30"
+                    }`}>
+                      <div className="flex items-center gap-2 mb-2">
+                        {answerResults[currentQuestionIndex].isCorrect ? (
+                          <CheckCircle className="w-5 h-5 text-accent" />
+                        ) : (
+                          <XCircle className="w-5 h-5 text-destructive" />
+                        )}
+                        <span className="font-medium">
+                          {answerResults[currentQuestionIndex].isCorrect ? "Sahi Jawab! 🎉" : "Galat Jawab"}
+                        </span>
+                      </div>
+                      <p className="text-sm text-muted-foreground mb-2">
+                        {answerResults[currentQuestionIndex].feedback}
+                      </p>
+                      {answerResults[currentQuestionIndex].reasoning && (
+                        <p className="text-xs text-muted-foreground italic">
+                          {answerResults[currentQuestionIndex].reasoning}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Correct Answer & Explanation */}
+                    <div className="p-3 bg-muted/50 rounded-xl">
+                      <p className="text-sm font-medium mb-1">
+                        Correct Answer: {currentQuestion.correct_answer}
+                      </p>
+                      <p className="text-sm text-muted-foreground">{currentQuestion.explanation}</p>
+                    </div>
+
                     <Button 
-                      className="mt-3 w-full rounded-xl" 
+                      className="w-full rounded-xl" 
                       onClick={handleNextQuestion}
                     >
-                      {currentQuestionIndex < quizQuestions.length - 1 ? "Next" : "See Results"}
+                      {currentQuestionIndex < quizQuestions.length - 1 ? `Next Question (${currentQuestionIndex + 2}/${quizQuestions.length})` : "See Results 🎯"}
                     </Button>
                   </div>
                 )}
