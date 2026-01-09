@@ -312,8 +312,8 @@ const StudyChat = ({ onEndStudy, studentId }: StudyChatProps) => {
     });
   };
 
-  // Web Speech API Text-to-Speech function (free, no API key needed)
-  const speakText = (text: string, messageId: string) => {
+  // ElevenLabs TTS for natural voice - fallback to Web Speech API
+  const speakText = async (text: string, messageId: string) => {
     // If already speaking this message, stop
     if (speakingMessageId === messageId) {
       window.speechSynthesis.cancel();
@@ -324,19 +324,55 @@ const StudyChat = ({ onEndStudy, studentId }: StudyChatProps) => {
     // Stop any ongoing speech
     window.speechSynthesis.cancel();
 
-    const cleanText = text.replace(/[🎉📚💪🤖👋✓✔❌⚠️🙏👍]/g, '').trim();
+    const cleanText = text.replace(/[🎉📚💪🤖👋✓✔❌⚠️🙏👍💡🎯📊📈📉🔥⭐]/g, '').trim();
     
     if (!cleanText) return;
     
     setSpeakingMessageId(messageId);
     
     try {
-      const utterance = new SpeechSynthesisUtterance(cleanText);
-      utterance.lang = 'hi-IN'; // Hindi for Hinglish support
+      // Try ElevenLabs first for natural voice
+      const { data, error } = await supabase.functions.invoke('elevenlabs-tts', {
+        body: { text: cleanText }
+      });
+
+      if (error || data?.error) {
+        console.log("ElevenLabs failed, falling back to Web Speech API:", error || data?.error);
+        fallbackToWebSpeech(cleanText, messageId);
+        return;
+      }
+
+      if (data?.audioContent) {
+        const audioUrl = `data:audio/mpeg;base64,${data.audioContent}`;
+        const audio = new Audio(audioUrl);
+        
+        audio.onended = () => {
+          setSpeakingMessageId(null);
+        };
+        
+        audio.onerror = () => {
+          console.log("Audio playback failed, falling back to Web Speech API");
+          fallbackToWebSpeech(cleanText, messageId);
+        };
+        
+        await audio.play();
+      } else {
+        fallbackToWebSpeech(cleanText, messageId);
+      }
+    } catch (error) {
+      console.error("TTS error:", error);
+      fallbackToWebSpeech(cleanText, messageId);
+    }
+  };
+
+  // Fallback to browser's Web Speech API
+  const fallbackToWebSpeech = (text: string, messageId: string) => {
+    try {
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'hi-IN';
       utterance.rate = voiceSpeed;
       utterance.pitch = 1.0;
       
-      // Try to find a Hindi male voice
       const voices = window.speechSynthesis.getVoices();
       const hindiVoice = voices.find(v => v.lang.includes('hi') && v.name.toLowerCase().includes('male')) ||
                          voices.find(v => v.lang.includes('hi')) ||
@@ -361,7 +397,7 @@ const StudyChat = ({ onEndStudy, studentId }: StudyChatProps) => {
 
       window.speechSynthesis.speak(utterance);
     } catch (error) {
-      console.error("TTS error:", error);
+      console.error("Web Speech TTS error:", error);
       setSpeakingMessageId(null);
       toast({
         title: "Voice Error", 

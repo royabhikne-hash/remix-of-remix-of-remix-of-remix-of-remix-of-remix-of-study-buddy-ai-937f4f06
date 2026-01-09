@@ -19,7 +19,7 @@ const Landing = () => {
           </div>
           <div className="flex items-center gap-1.5 sm:gap-3 flex-shrink-0">
             <ThemeToggle />
-            <Button variant="ghost" size="sm" onClick={() => navigate("/login")} className="hidden sm:flex">
+            <Button variant="ghost" size="sm" onClick={() => navigate("/login")} className="text-xs sm:text-sm px-2 sm:px-4">
               Login
             </Button>
             <Button variant="hero" size="sm" onClick={() => navigate("/signup")} className="text-xs sm:text-sm px-3 sm:px-4">
