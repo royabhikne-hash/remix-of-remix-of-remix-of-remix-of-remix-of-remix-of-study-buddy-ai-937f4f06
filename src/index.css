@@ -164,12 +164,58 @@
     background: var(--gradient-hero);
   }
 
+  /* Enhanced Chat Bubble Styles */
   .chat-bubble-user {
-    @apply bg-primary text-primary-foreground rounded-2xl rounded-br-md px-4 py-3 max-w-[80%] ml-auto;
+    @apply bg-primary text-primary-foreground rounded-2xl rounded-br-sm px-4 py-3 max-w-[85%] ml-auto shadow-sm;
+    background: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(217 91% 50%) 100%);
   }
 
   .chat-bubble-ai {
-    @apply bg-secondary text-secondary-foreground rounded-2xl rounded-bl-md px-4 py-3 max-w-[80%];
+    @apply bg-card text-card-foreground rounded-2xl rounded-bl-sm px-4 py-3 max-w-[85%] border border-border/50 shadow-sm;
+  }
+
+  /* Quiz Option Styles */
+  .quiz-option {
+    @apply w-full text-left p-4 rounded-xl border-2 transition-all duration-200 text-sm font-medium;
+  }
+
+  .quiz-option-default {
+    @apply bg-card border-border hover:border-primary/50 hover:bg-primary/5;
+  }
+
+  .quiz-option-selected {
+    @apply bg-primary/10 border-primary text-primary;
+  }
+
+  .quiz-option-correct {
+    @apply bg-accent/10 border-accent text-accent;
+  }
+
+  .quiz-option-wrong {
+    @apply bg-destructive/10 border-destructive text-destructive;
+  }
+
+  /* Stats Cards */
+  .stat-card {
+    @apply edu-card p-5 transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5;
+  }
+
+  .stat-card-accent {
+    @apply stat-card bg-gradient-to-br from-accent/5 to-accent/10 border-accent/20;
+  }
+
+  .stat-card-primary {
+    @apply stat-card bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20;
+  }
+
+  /* Progress Bar */
+  .progress-bar {
+    @apply h-2 rounded-full bg-muted overflow-hidden;
+  }
+
+  .progress-bar-fill {
+    @apply h-full rounded-full transition-all duration-500 ease-out;
+    background: linear-gradient(90deg, hsl(var(--primary)) 0%, hsl(var(--accent)) 100%);
   }
 
   .status-badge {
@@ -194,6 +240,28 @@
 
   .trend-stable {
     @apply text-muted-foreground;
+  }
+
+  /* Glass Effect */
+  .glass {
+    @apply bg-background/80 backdrop-blur-md border border-border/50;
+  }
+
+  /* Shimmer Animation for Loading */
+  .shimmer {
+    background: linear-gradient(
+      90deg,
+      hsl(var(--muted)) 0%,
+      hsl(var(--muted-foreground) / 0.1) 50%,
+      hsl(var(--muted)) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+  }
+
+  @keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
   }
 }
 

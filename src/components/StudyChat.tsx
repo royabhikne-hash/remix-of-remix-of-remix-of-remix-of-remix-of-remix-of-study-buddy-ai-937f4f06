@@ -387,11 +387,12 @@ const StudyChat = ({ onEndStudy, studentId }: StudyChatProps) => {
     }
   };
 
-  // Function to speak quiz question
-  const speakQuizQuestion = (question: QuizQuestion) => {
+  // Function to speak quiz question with correct numbering
+  const speakQuizQuestion = (question: QuizQuestion, questionNumber?: number) => {
     if (!autoSpeak) return;
     
-    let questionText = `Question ${currentQuestionIndex + 1}. ${question.question}`;
+    const qNum = questionNumber ?? (currentQuestionIndex + 1);
+    let questionText = `Question ${qNum} of ${quizQuestions.length || 5}. ${question.question}`;
     
     // Add options for MCQ
     if (question.type === "mcq" && question.options) {
@@ -419,7 +420,12 @@ const StudyChat = ({ onEndStudy, studentId }: StudyChatProps) => {
       }));
 
       const { data, error } = await supabase.functions.invoke('study-chat', {
-        body: { messages: formattedMessages, studentId, analyzeSession: true }
+        body: { 
+          messages: formattedMessages, 
+          studentId, 
+          analyzeSession: true,
+          currentTopic: currentTopic || undefined // Pass current topic to AI
+        }
       });
 
       if (error) {
@@ -644,17 +650,17 @@ const StudyChat = ({ onEndStudy, studentId }: StudyChatProps) => {
         };
         setMessages(prev => [...prev, quizIntro]);
         
-        // Speak intro and first question after delay
-        if (autoSpeak) {
-          setTimeout(() => {
-            speakText(introMessage, `quiz-intro-${Date.now()}`, true);
-          }, 300);
-          
-          // Speak first question after intro
-          setTimeout(() => {
-            speakQuizQuestion(data.quiz.questions[0]);
-          }, 4000);
-        }
+          // Speak intro and first question after delay
+          if (autoSpeak) {
+            setTimeout(() => {
+              speakText(introMessage, `quiz-intro-${Date.now()}`, true);
+            }, 300);
+            
+            // Speak first question after intro - use question number 1
+            setTimeout(() => {
+              speakQuizQuestion(data.quiz.questions[0], 1);
+            }, 4000);
+          }
       } else {
         finishStudySession();
       }
@@ -750,9 +756,9 @@ const StudyChat = ({ onEndStudy, studentId }: StudyChatProps) => {
       const nextIndex = currentQuestionIndex + 1;
       setCurrentQuestionIndex(nextIndex);
       
-      // Speak the next question
+      // Speak the next question with correct number
       if (quizQuestions[nextIndex]) {
-        speakQuizQuestion(quizQuestions[nextIndex]);
+        speakQuizQuestion(quizQuestions[nextIndex], nextIndex + 1);
       }
     } else {
       calculateQuizResults();
@@ -836,19 +842,29 @@ const StudyChat = ({ onEndStudy, studentId }: StudyChatProps) => {
   const currentQuestion = quizQuestions[currentQuestionIndex];
 
   return (
-    <div className="flex flex-col h-[calc(100vh-60px)] bg-background">
+    <div className="flex flex-col h-[calc(100vh-60px)] bg-gradient-to-b from-background to-muted/20">
       {/* Confetti Celebration */}
       <Confetti trigger={showConfetti} onComplete={() => setShowConfetti(false)} />
-      {/* Minimal ChatGPT-style Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border/50 bg-background/80 backdrop-blur-sm">
+      {/* Enhanced ChatGPT-style Header */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border/50 bg-card/95 backdrop-blur-sm shadow-sm">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center">
-            <Bot className="w-5 h-5 text-primary-foreground" />
+          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-md">
+            <Bot className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h3 className="font-semibold text-foreground text-sm">AI Study Buddy</h3>
-            <p className="text-xs text-muted-foreground">
-              {isQuizMode ? `Quiz ${currentQuestionIndex + 1}/${quizQuestions.length}` : currentTopic || "Online"}
+            <h3 className="font-bold text-foreground">AI Study Buddy</h3>
+            <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+              {isQuizMode ? (
+                <span className="flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse"></span>
+                  Quiz Mode • Question {currentQuestionIndex + 1}/{quizQuestions.length}
+                </span>
+              ) : (
+                <span className="flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-accent"></span>
+                  {currentTopic || "Ready to help!"}
+                </span>
+              )}
             </p>
           </div>
         </div>
@@ -958,20 +974,22 @@ const StudyChat = ({ onEndStudy, studentId }: StudyChatProps) => {
           return (
             <div
               key={message.id}
-              className={`py-6 px-4 ${isUser ? "bg-background" : "bg-muted/30"}`}
+              className={`py-5 px-4 ${isUser ? "bg-background" : "bg-muted/20"} transition-colors`}
             >
               <div className="max-w-3xl mx-auto flex gap-4">
                 {/* Avatar */}
-                <div className={`w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center ${
-                  isUser ? "bg-primary text-primary-foreground" : "bg-accent/20 text-accent"
+                <div className={`w-9 h-9 rounded-full flex-shrink-0 flex items-center justify-center shadow-sm ${
+                  isUser 
+                    ? "bg-gradient-to-br from-primary to-primary/80 text-primary-foreground" 
+                    : "bg-gradient-to-br from-accent/80 to-accent text-white"
                 }`}>
                   {isUser ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
                 </div>
                 
                 {/* Content */}
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="font-medium text-sm">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className="font-semibold text-sm">
                       {isUser ? "You" : "AI Study Buddy"}
                     </span>
                     <span className="text-xs text-muted-foreground">
@@ -983,11 +1001,11 @@ const StudyChat = ({ onEndStudy, studentId }: StudyChatProps) => {
                     <img
                       src={message.imageUrl}
                       alt="Uploaded"
-                      className="max-w-[200px] rounded-lg mb-2"
+                      className="max-w-[200px] rounded-xl mb-3 shadow-sm border border-border/50"
                     />
                   )}
                   
-                  <div className="text-foreground whitespace-pre-wrap leading-relaxed">
+                  <div className="text-foreground whitespace-pre-wrap leading-relaxed text-[15px]">
                     {!isUser && message.isTyping && typingMessageId === message.id ? (
                       <TypingText 
                         text={message.content} 
@@ -1052,26 +1070,30 @@ const StudyChat = ({ onEndStudy, studentId }: StudyChatProps) => {
           );
         })}
         
-        {/* Quiz Question UI */}
+        {/* Enhanced Quiz Question UI */}
         {isQuizMode && currentQuestion && !showResult && (
-          <div className="py-5 bg-muted/20">
-            <div className="max-w-2xl mx-auto px-4 flex gap-3">
-              <div className="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center bg-gradient-to-br from-accent/80 to-accent text-accent-foreground">
-                <Bot className="w-3.5 h-3.5" />
+          <div className="py-6 bg-gradient-to-b from-primary/5 to-accent/5">
+            <div className="max-w-2xl mx-auto px-4 flex gap-4">
+              <div className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center bg-gradient-to-br from-primary to-accent text-white shadow-md">
+                <Brain className="w-5 h-5" />
               </div>
               <div className="flex-1">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium">
-                    Q{currentQuestionIndex + 1}/{quizQuestions.length}
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="text-sm bg-primary/10 text-primary px-3 py-1 rounded-full font-semibold">
+                    Question {currentQuestionIndex + 1} of {quizQuestions.length}
                   </span>
-                  <span className="text-xs text-muted-foreground">
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${
+                    currentQuestion.difficulty === 'easy' ? 'bg-accent/20 text-accent' :
+                    currentQuestion.difficulty === 'medium' ? 'bg-warning/20 text-warning' :
+                    'bg-destructive/20 text-destructive'
+                  }`}>
                     {currentQuestion.difficulty}
                   </span>
                 </div>
-                <p className="font-medium text-base mb-4">{currentQuestion.question}</p>
+                <p className="font-semibold text-lg mb-5 leading-relaxed">{currentQuestion.question}</p>
                 
                 {currentQuestion.type === "mcq" && currentQuestion.options && (
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     {currentQuestion.options.map((option, idx) => {
                       const isSelected = selectedOption === option;
                       const isCorrect = option.toLowerCase() === currentQuestion.correct_answer.toLowerCase();
@@ -1082,22 +1104,27 @@ const StudyChat = ({ onEndStudy, studentId }: StudyChatProps) => {
                           key={idx}
                           onClick={() => !showExplanation && handleQuizAnswer(option)}
                           disabled={showExplanation}
-                          className={`w-full text-left p-3 rounded-xl border transition-all text-sm ${
+                          className={`w-full text-left p-4 rounded-xl border-2 transition-all duration-200 ${
                             showFeedback
                               ? isCorrect
-                                ? "bg-accent/10 border-accent"
+                                ? "bg-accent/10 border-accent shadow-sm"
                                 : isSelected
                                   ? "bg-destructive/10 border-destructive"
-                                  : "bg-muted/50 border-border"
+                                  : "bg-muted/30 border-border/50"
                               : isSelected
-                                ? "bg-primary/10 border-primary"
-                                : "bg-background border-border hover:border-primary/50"
+                                ? "bg-primary/10 border-primary shadow-sm"
+                                : "bg-card border-border hover:border-primary/50 hover:bg-primary/5"
                           }`}
                         >
                           <div className="flex items-center justify-between">
-                            <span>{String.fromCharCode(65 + idx)}. {option}</span>
-                            {showFeedback && isCorrect && <CheckCircle className="w-4 h-4 text-accent" />}
-                            {showFeedback && isSelected && !isCorrect && <XCircle className="w-4 h-4 text-destructive" />}
+                            <span className="font-medium">
+                              <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-muted text-sm font-bold mr-3">
+                                {String.fromCharCode(65 + idx)}
+                              </span>
+                              {option}
+                            </span>
+                            {showFeedback && isCorrect && <CheckCircle className="w-5 h-5 text-accent" />}
+                            {showFeedback && isSelected && !isCorrect && <XCircle className="w-5 h-5 text-destructive" />}
                           </div>
                         </button>
                       );
@@ -1106,7 +1133,7 @@ const StudyChat = ({ onEndStudy, studentId }: StudyChatProps) => {
                 )}
 
                 {currentQuestion.type === "true_false" && (
-                  <div className="flex gap-2">
+                  <div className="flex gap-3">
                     {["True", "False"].map((option) => {
                       const isSelected = selectedOption === option;
                       const isCorrect = option.toLowerCase() === currentQuestion.correct_answer.toLowerCase();
@@ -1117,16 +1144,16 @@ const StudyChat = ({ onEndStudy, studentId }: StudyChatProps) => {
                           key={option}
                           onClick={() => !showExplanation && handleQuizAnswer(option)}
                           disabled={showExplanation}
-                          className={`flex-1 p-3 rounded-xl border transition-all text-sm ${
+                          className={`flex-1 p-4 rounded-xl border-2 transition-all font-semibold ${
                             showFeedback
                               ? isCorrect
                                 ? "bg-accent/10 border-accent"
                                 : isSelected
                                   ? "bg-destructive/10 border-destructive"
-                                  : "bg-muted/50 border-border"
+                                  : "bg-muted/30 border-border/50"
                               : isSelected
                                 ? "bg-primary/10 border-primary"
-                                : "bg-background border-border hover:border-primary/50"
+                                : "bg-card border-border hover:border-primary/50 hover:bg-primary/5"
                           }`}
                         >
                           {option}

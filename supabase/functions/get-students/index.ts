@@ -87,13 +87,13 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Load study sessions from last 7 days
+      // Load study sessions from last 7 days with quiz attempts for accurate scoring
       const weekAgo = new Date();
       weekAgo.setDate(weekAgo.getDate() - 7);
 
       const { data: sessionsData } = await supabaseAdmin
         .from('study_sessions')
-        .select('*')
+        .select('*, quiz_attempts(accuracy_percentage)')
         .eq('student_id', student_id)
         .gte('created_at', weekAgo.toISOString())
         .order('created_at', { ascending: false });
@@ -104,6 +104,20 @@ Deno.serve(async (req) => {
         .eq('student_id', student_id)
         .gte('created_at', weekAgo.toISOString())
         .order('created_at', { ascending: false });
+      
+      // Enhance sessions with quiz accuracy as primary score
+      const enhancedSessions = (sessionsData || []).map((session: any) => {
+        const quizAttempts = session.quiz_attempts as { accuracy_percentage: number | null }[] | null;
+        const quizScore = (quizAttempts && quizAttempts.length > 0 && quizAttempts[0].accuracy_percentage !== null)
+          ? quizAttempts[0].accuracy_percentage
+          : null;
+        
+        return {
+          ...session,
+          // Use quiz score if available, otherwise keep original improvement_score
+          improvement_score: quizScore !== null ? quizScore : session.improvement_score,
+        };
+      });
 
       // Load class averages for comparison
       let classAverages = null;
@@ -148,7 +162,7 @@ Deno.serve(async (req) => {
       return new Response(
         JSON.stringify({
           student: studentData,
-          sessions: sessionsData || [],
+          sessions: enhancedSessions,
           quizzes: quizzesData || [],
           classAverages,
         }),
@@ -211,19 +225,32 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Fetch study sessions for each student
+      // Fetch study sessions with quiz attempts for each student to get accurate scores
       const studentsWithSessions = await Promise.all(
         (students || []).map(async (student) => {
           const { data: sessions } = await supabaseAdmin
             .from('study_sessions')
-            .select('*')
+            .select('*, quiz_attempts(accuracy_percentage)')
             .eq('student_id', student.id)
             .order('created_at', { ascending: false })
             .limit(10);
 
+          // Enhance sessions with quiz accuracy as primary score
+          const enhancedSessions = (sessions || []).map((session: any) => {
+            const quizAttempts = session.quiz_attempts as { accuracy_percentage: number | null }[] | null;
+            const quizScore = (quizAttempts && quizAttempts.length > 0 && quizAttempts[0].accuracy_percentage !== null)
+              ? quizAttempts[0].accuracy_percentage
+              : null;
+            
+            return {
+              ...session,
+              improvement_score: quizScore !== null ? quizScore : session.improvement_score,
+            };
+          });
+
           return {
             ...student,
-            study_sessions: sessions || []
+            study_sessions: enhancedSessions
           };
         })
       );

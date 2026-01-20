@@ -56,45 +56,64 @@ serve(async (req) => {
     console.log("Generating adaptive quiz for topic:", topic);
     console.log("Student level:", studentLevel);
 
-    // Build context from chat messages (limited)
+    // Build context from chat messages (limited) - extract topics discussed
     const chatContext = messages
       ?.filter((m: ChatMessage) => m.role === "user" || m.role === "assistant")
-      .slice(-4)
+      .slice(-6)
       .map((m: ChatMessage) => `${m.role}: ${m.content}`)
       .join("\n")
-      .slice(-2000);
+      .slice(-3000);
 
     const weakAreasText = weakAreas?.length > 0 ? weakAreas.join(", ") : "None identified";
     const strongAreasText = strongAreas?.length > 0 ? strongAreas.join(", ") : "None identified";
 
-    // Simplified prompt for faster generation
-    const systemPrompt = `You are a quiz generator for Indian students. Generate 5 quick quiz questions based on the study session.
+    // Enhanced prompt for topic-focused quiz generation
+    const systemPrompt = `You are a quiz generator for Indian students studying "${topic || 'General Study'}".
 
-RULES:
-1. Generate exactly 5 questions (mix of MCQ and True/False only)
-2. Focus on weak areas: ${weakAreasText}
-3. Use simple Hinglish like talking to a friend
-4. Questions should test understanding, not just memory
+CRITICAL RULES:
+1. Generate EXACTLY 5 questions
+2. ALL questions MUST be about "${topic || 'General Study'}" ONLY
+3. DO NOT include questions from other subjects
+4. If topic is Physics, ask ONLY Physics questions
+5. If topic is Biology, ask ONLY Biology questions
+6. Questions should be based on what was discussed in the study session
+7. Use simple Hinglish (Hindi-English mix)
+8. Number questions from 1 to 5 correctly
+
+QUESTION TYPES:
+- Mix of MCQ (4 options) and True/False
+- Focus on weak areas: ${weakAreasText}
+- Build confidence with strong areas: ${strongAreasText}
 
 OUTPUT FORMAT (strictly JSON):
 {
   "questions": [
     {
       "id": 1,
-      "type": "mcq" | "true_false",
-      "question": "Simple Hinglish question?",
-      "options": ["A", "B", "C", "D"],
-      "correct_answer": "The correct answer",
+      "type": "mcq",
+      "question": "Simple Hinglish question about ${topic}?",
+      "options": ["Option A", "Option B", "Option C", "Option D"],
+      "correct_answer": "The exact correct option text",
       "explanation": "Brief explanation in Hinglish",
-      "difficulty": "easy" | "medium" | "hard",
-      "topic": "Topic name"
+      "difficulty": "easy",
+      "topic": "${topic}"
+    },
+    {
+      "id": 2,
+      "type": "true_false",
+      "question": "Statement about ${topic}?",
+      "options": ["True", "False"],
+      "correct_answer": "True",
+      "explanation": "Why this is true/false",
+      "difficulty": "medium",
+      "topic": "${topic}"
     }
   ],
   "total_questions": 5
 }
 
-STUDY SESSION:
-${chatContext || "General study on " + (topic || "various topics")}`;
+STUDY SESSION CONTEXT (use this to create relevant questions):
+${chatContext || `General study session about ${topic || "various topics"}`}`;
 
     // Use fastest model
     const MODEL = "google/gemini-2.5-flash";
@@ -154,12 +173,21 @@ ${chatContext || "General study on " + (topic || "various topics")}`;
       const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         quizData = JSON.parse(jsonMatch[0]);
+        // Ensure question IDs are sequential
+        if (quizData.questions && Array.isArray(quizData.questions)) {
+          quizData.questions = quizData.questions.map((q: any, idx: number) => ({
+            ...q,
+            id: idx + 1, // Force sequential IDs 1, 2, 3, 4, 5
+            topic: q.topic || topic || "General Study"
+          }));
+          quizData.total_questions = quizData.questions.length;
+        }
       } else {
         throw new Error("No JSON found in response");
       }
     } catch (e) {
       console.error("Failed to parse quiz JSON:", e);
-      // Generate fallback questions
+      // Generate fallback questions with proper IDs
       quizData = {
         questions: [
           {
@@ -175,15 +203,45 @@ ${chatContext || "General study on " + (topic || "various topics")}`;
           {
             id: 2,
             type: "true_false",
-            question: "Kya aapne is topic ko achhe se samjha?",
+            question: `${topic || "Is topic"} ke concepts clear hain?`,
             options: ["True", "False"],
             correct_answer: "True",
             explanation: "Practice se samajh aur better hogi!",
             difficulty: "easy",
             topic: topic || "General"
+          },
+          {
+            id: 3,
+            type: "mcq",
+            question: `${topic || "Padhai"} mein konsa part sabse important hai?`,
+            options: ["Basics", "Practice", "Revision", "All of these"],
+            correct_answer: "All of these",
+            explanation: "Sab important hain padhai mein!",
+            difficulty: "easy",
+            topic: topic || "General"
+          },
+          {
+            id: 4,
+            type: "true_false",
+            question: "Regular practice se improvement hoti hai?",
+            options: ["True", "False"],
+            correct_answer: "True",
+            explanation: "Haan, daily practice bahut zaroori hai!",
+            difficulty: "easy",
+            topic: topic || "General"
+          },
+          {
+            id: 5,
+            type: "mcq",
+            question: "Notes banana kab helpful hota hai?",
+            options: ["Class mein", "Revision mein", "Exam mein", "Har jagah"],
+            correct_answer: "Har jagah",
+            explanation: "Notes har jagah kaam aate hain!",
+            difficulty: "easy",
+            topic: topic || "General"
           }
         ],
-        total_questions: 2
+        total_questions: 5
       };
     }
 

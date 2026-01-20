@@ -24,7 +24,7 @@ function checkRateLimit(userId: string, maxRequests = 30, windowMs = 60000): boo
   return true;
 }
 
-const buildSystemPrompt = (pastSessions: any[], weakAreas: string[], strongAreas: string[]) => {
+const buildSystemPrompt = (pastSessions: any[], weakAreas: string[], strongAreas: string[], currentTopic: string = "") => {
   let personalizedContext = "";
   
   if (pastSessions.length > 0) {
@@ -44,8 +44,17 @@ Use this history to:
 `;
   }
 
-  return `You are an AI Study Buddy for Indian students. You chat in Hinglish (Hindi-English mix) in a respectful and supportive way.
+  const topicInstruction = currentTopic ? `
+CURRENT STUDY TOPIC: ${currentTopic}
+CRITICAL: You MUST stay focused ONLY on "${currentTopic}". 
+- DO NOT ask questions about other subjects
+- DO NOT switch to biology if student said physics, or vice versa
+- If student asks about a different subject, acknowledge but gently bring them back to ${currentTopic}
+- All examples, questions, and explanations should be ONLY about ${currentTopic}
+` : "";
 
+  return `You are an AI Study Buddy for Indian students. You chat in Hinglish (Hindi-English mix) in a respectful and supportive way.
+${topicInstruction}
 CRITICAL LANGUAGE RULES:
 - ALWAYS use "aap" (respectful) instead of "tum" or "tu"
 - Use respectful phrases like "Aap", "Ji", "Dekhiye", "Samjhiye"
@@ -79,15 +88,15 @@ ${personalizedContext}
 
 Your responsibilities during study sessions:
 1. Greet warmly and ask what they're studying today
-2. Explain topics in simple Hinglish
-3. Summarize what they've studied
-4. Highlight important exam points
-5. Ask 2-3 quick understanding questions
-6. Detect confusion or weak areas
-7. Suggest what to revise next based on their history
-8. Be encouraging about their progress
-9. If they've studied a topic before, remind them and build on it
-10. Proactively suggest revising weak areas when appropriate
+2. STAY ON THE CURRENT TOPIC - do not mix subjects
+3. Explain topics in simple Hinglish
+4. Summarize what they've studied
+5. Highlight important exam points
+6. Ask 2-3 quick understanding questions ONLY about the current topic
+7. Detect confusion or weak areas
+8. Suggest what to revise next based on their history
+9. Be encouraging about their progress
+10. If they've studied a topic before, remind them and build on it
 
 When analyzing uploaded images of notes/books:
 1. Identify the topic and key concepts
@@ -116,7 +125,7 @@ serve(async (req) => {
   }
 
   try {
-    const { messages, studentId, analyzeSession } = await req.json();
+    const { messages, studentId, analyzeSession, currentTopic } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     
     if (!LOVABLE_API_KEY) {
@@ -181,8 +190,8 @@ serve(async (req) => {
       }
     }
 
-    // Build personalized system prompt
-    const systemPrompt = buildSystemPrompt(pastSessions, weakAreas, strongAreas);
+    // Build personalized system prompt with current topic
+    const systemPrompt = buildSystemPrompt(pastSessions, weakAreas, strongAreas, currentTopic || "");
 
     // Add analysis instruction if requested
     const analysisInstruction = analyzeSession ? `
