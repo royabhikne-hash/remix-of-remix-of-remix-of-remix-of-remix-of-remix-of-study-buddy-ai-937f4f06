@@ -237,12 +237,13 @@ const SchoolDashboard = () => {
   const getSchoolCredentials = () => {
     const schoolId = localStorage.getItem("schoolId");
     const schoolUUID = localStorage.getItem("schoolUUID") || schoolUuid;
+    const sessionToken = localStorage.getItem("schoolSessionToken");
     
-    if (!schoolId || !schoolUUID) {
+    if (!schoolId || !schoolUUID || !sessionToken) {
       return null;
     }
     
-    return { schoolId, schoolUUID };
+    return { schoolId, schoolUUID, sessionToken };
   };
 
   const handleApproveStudent = async (studentId: string) => {
@@ -266,6 +267,7 @@ const SchoolDashboard = () => {
           action: "approve",
           schoolId: creds.schoolId,
           schoolUuid: creds.schoolUUID,
+          sessionToken: creds.sessionToken,
           studentId,
         },
       });
@@ -323,6 +325,7 @@ const SchoolDashboard = () => {
           action: "reject",
           schoolId: creds.schoolId,
           schoolUuid: creds.schoolUUID,
+          sessionToken: creds.sessionToken,
           studentId: rejectingStudent.id,
           rejectionReason: rejectionReason.trim() || "No reason provided",
         },
@@ -400,6 +403,7 @@ const SchoolDashboard = () => {
           action: "bulk_approve",
           schoolId: creds.schoolId,
           schoolUuid: creds.schoolUUID,
+          sessionToken: creds.sessionToken,
           studentIds: Array.from(selectedPendingIds),
         },
       });
@@ -453,6 +457,7 @@ const SchoolDashboard = () => {
           action: "bulk_reject",
           schoolId: creds.schoolId,
           schoolUuid: creds.schoolUUID,
+          sessionToken: creds.sessionToken,
           studentIds: Array.from(selectedPendingIds),
           rejectionReason: bulkRejectionReason.trim() || "No reason provided",
         },
