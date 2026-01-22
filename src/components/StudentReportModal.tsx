@@ -186,13 +186,13 @@ const StudentReportModal = ({
           });
         }
 
-        // Load study sessions from last 7 days
+        // Load study sessions from last 7 days with quiz attempts for accurate scoring
         const weekAgo = new Date();
         weekAgo.setDate(weekAgo.getDate() - 7);
 
         const { data: sessionsData } = await supabase
           .from("study_sessions")
-          .select("*")
+          .select("*, quiz_attempts(accuracy_percentage)")
           .eq("student_id", studentId)
           .gte("created_at", weekAgo.toISOString())
           .order("created_at", { ascending: false });
@@ -204,7 +204,20 @@ const StudentReportModal = ({
           .gte("created_at", weekAgo.toISOString())
           .order("created_at", { ascending: false });
 
-        setSessions(sessionsData || []);
+        // Enhance sessions with quiz accuracy as primary score (consistent with edge function)
+        const enhancedSessions = (sessionsData || []).map((session: any) => {
+          const quizAttempts = session.quiz_attempts as { accuracy_percentage: number | null }[] | null;
+          const quizScore = (quizAttempts && quizAttempts.length > 0 && quizAttempts[0].accuracy_percentage !== null)
+            ? quizAttempts[0].accuracy_percentage
+            : null;
+          
+          return {
+            ...session,
+            improvement_score: quizScore !== null ? quizScore : session.improvement_score,
+          };
+        });
+
+        setSessions(enhancedSessions);
         setQuizzes(quizzesData || []);
 
         // Load class averages for comparison
