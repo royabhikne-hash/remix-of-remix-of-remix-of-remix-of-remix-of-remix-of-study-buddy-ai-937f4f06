@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   BookOpen,
   Clock,
@@ -17,10 +17,12 @@ import {
   History,
   CalendarDays,
   Sun,
+  Trophy,
 } from "lucide-react";
 import { DashboardSkeleton } from "@/components/DashboardSkeleton";
 import StudyChat from "@/components/StudyChat";
 import ChatHistory from "@/components/ChatHistory";
+import StudentRankingCard from "@/components/StudentRankingCard";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import LanguageToggle from "@/components/LanguageToggle";
 import { useToast } from "@/hooks/use-toast";
@@ -65,9 +67,18 @@ const StudentDashboard = () => {
   const [isApproved, setIsApproved] = useState<boolean | null>(null);
   const [rejectionReason, setRejectionReason] = useState<string | null>(null);
   const [schoolName, setSchoolName] = useState<string>("");
+  const [studentDistrict, setStudentDistrict] = useState<string>("");
   
   const [analyticsView, setAnalyticsView] = useState<"today" | "week">("today");
+  const [mainTab, setMainTab] = useState<"study" | "rankings">("study");
   const [isDataLoading, setIsDataLoading] = useState(true);
+  
+  // Ranking data
+  const [mySchoolRank, setMySchoolRank] = useState<any>(null);
+  const [myDistrictRank, setMyDistrictRank] = useState<any>(null);
+  const [totalSchoolStudents, setTotalSchoolStudents] = useState(0);
+  const [totalDistrictStudents, setTotalDistrictStudents] = useState(0);
+  const [rankingHistory, setRankingHistory] = useState<any[]>([]);
   
   const [todayStats, setTodayStats] = useState({
     sessions: 0,
@@ -147,6 +158,12 @@ const StudentDashboard = () => {
         setIsApproved(student.is_approved);
         setRejectionReason(student.rejection_reason || null);
         setSchoolName((student.schools as any)?.name || "Your School");
+        setStudentDistrict(student.district || "Your District");
+        
+        // Load ranking data if approved
+        if (student.is_approved) {
+          loadRankingData(student.id);
+        }
         
         // Only load sessions if approved
         if (student.is_approved) {
@@ -232,6 +249,32 @@ const StudentDashboard = () => {
       }
     } catch (error) {
       console.error("Error loading student data:", error);
+    }
+  };
+
+  const loadRankingData = async (studentIdToLoad: string) => {
+    try {
+      const { data, error } = await supabase.functions.invoke("get-students", {
+        body: {
+          action: "get_student_rankings",
+          student_id: studentIdToLoad,
+        },
+      });
+
+      if (error) {
+        console.error("Error fetching rankings:", error);
+        return;
+      }
+
+      if (data) {
+        setMySchoolRank(data.mySchoolRank);
+        setMyDistrictRank(data.myDistrictRank);
+        setTotalSchoolStudents(data.totalSchoolStudents || 0);
+        setTotalDistrictStudents(data.totalDistrictStudents || 0);
+        setRankingHistory(data.rankingHistory || []);
+      }
+    } catch (err) {
+      console.error("Error loading ranking data:", err);
     }
   };
 
@@ -567,115 +610,143 @@ const StudentDashboard = () => {
           </div>
         </div>
 
-        {/* Analytics Toggle */}
-        <div className="flex justify-center mb-6">
-          <Tabs value={analyticsView} onValueChange={(v) => setAnalyticsView(v as "today" | "week")} className="w-auto">
-            <TabsList className="grid grid-cols-2 w-64">
-              <TabsTrigger value="today" className="flex items-center gap-2">
-                <Sun className="w-4 h-4" />
-                Today
-              </TabsTrigger>
-              <TabsTrigger value="week" className="flex items-center gap-2">
-                <CalendarDays className="w-4 h-4" />
-                This Week
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-        </div>
+        {/* Main Tabs: Study / Rankings */}
+        <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as "study" | "rankings")} className="mb-6">
+          <TabsList className="grid w-full max-w-md mx-auto grid-cols-2">
+            <TabsTrigger value="study" className="flex items-center gap-2">
+              <BookOpen className="w-4 h-4" />
+              Study
+            </TabsTrigger>
+            <TabsTrigger value="rankings" className="flex items-center gap-2">
+              <Trophy className="w-4 h-4" />
+              Rankings
+            </TabsTrigger>
+          </TabsList>
 
-        {/* Stats Grid - Today View */}
-        {analyticsView === "today" && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-            <StatCard
-              icon={<CheckCircle className="w-5 h-5" />}
-              label="Today Status"
-              value={todayStats.studied ? "Studied ✓" : "Not Yet"}
-              color={todayStats.studied ? "accent" : "muted"}
-            />
-            <StatCard
-              icon={<BookOpen className="w-5 h-5" />}
-              label="Today Sessions"
-              value={todayStats.sessions.toString()}
-              color="primary"
-            />
-            <StatCard
-              icon={<Clock className="w-5 h-5" />}
-              label="Today's Time"
-              value={`${Math.floor(todayStats.minutes / 60)}h ${todayStats.minutes % 60}m`}
-              color="primary"
-            />
-            <StatCard
-              icon={<TrendingUp className="w-5 h-5" />}
-              label="Today Score"
-              value={todayStats.avgScore > 0 ? `${todayStats.avgScore}%` : "-"}
-              color="accent"
-            />
-          </div>
-        )}
+          <TabsContent value="study" className="mt-6">
+            {/* Analytics Toggle */}
+            <div className="flex justify-center mb-6">
+              <Tabs value={analyticsView} onValueChange={(v) => setAnalyticsView(v as "today" | "week")} className="w-auto">
+                <TabsList className="grid grid-cols-2 w-64">
+                  <TabsTrigger value="today" className="flex items-center gap-2">
+                    <Sun className="w-4 h-4" />
+                    Today
+                  </TabsTrigger>
+                  <TabsTrigger value="week" className="flex items-center gap-2">
+                    <CalendarDays className="w-4 h-4" />
+                    This Week
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </div>
 
-        {/* Stats Grid - Week View */}
-        {analyticsView === "week" && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-            <StatCard
-              icon={<CalendarDays className="w-5 h-5" />}
-              label="Days Studied"
-              value={`${weekStats.daysStudied}/7`}
-              color={weekStats.daysStudied >= 5 ? "accent" : "primary"}
-            />
-            <StatCard
-              icon={<BookOpen className="w-5 h-5" />}
-              label="Week Sessions"
-              value={weekStats.sessions.toString()}
-              color="primary"
-            />
-            <StatCard
-              icon={<Clock className="w-5 h-5" />}
-              label="Week Time"
-              value={`${Math.floor(weekStats.minutes / 60)}h ${weekStats.minutes % 60}m`}
-              color="primary"
-            />
-            <StatCard
-              icon={<TrendingUp className="w-5 h-5" />}
-              label="Week Avg Score"
-              value={weekStats.avgScore > 0 ? `${weekStats.avgScore}%` : "-"}
-              color="accent"
-            />
-          </div>
-        )}
+            {/* Stats Grid - Today View */}
+            {analyticsView === "today" && (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                <StatCard
+                  icon={<CheckCircle className="w-5 h-5" />}
+                  label="Today Status"
+                  value={todayStats.studied ? "Studied ✓" : "Not Yet"}
+                  color={todayStats.studied ? "accent" : "muted"}
+                />
+                <StatCard
+                  icon={<BookOpen className="w-5 h-5" />}
+                  label="Today Sessions"
+                  value={todayStats.sessions.toString()}
+                  color="primary"
+                />
+                <StatCard
+                  icon={<Clock className="w-5 h-5" />}
+                  label="Today's Time"
+                  value={`${Math.floor(todayStats.minutes / 60)}h ${todayStats.minutes % 60}m`}
+                  color="primary"
+                />
+                <StatCard
+                  icon={<TrendingUp className="w-5 h-5" />}
+                  label="Today Score"
+                  value={todayStats.avgScore > 0 ? `${todayStats.avgScore}%` : "-"}
+                  color="accent"
+                />
+              </div>
+            )}
 
-        {/* Recent Sessions */}
-        <div className="edu-card p-6">
-          <h2 className="text-lg font-bold mb-4">Recent Study Sessions</h2>
-          {recentSessions.length > 0 ? (
-            <div className="space-y-3">
-              {recentSessions.map((session) => (
-                <div
-                  key={session.id}
-                  className="flex items-center justify-between p-4 bg-secondary/30 rounded-xl"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                      <BookOpen className="w-5 h-5 text-primary" />
+            {/* Stats Grid - Week View */}
+            {analyticsView === "week" && (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                <StatCard
+                  icon={<CalendarDays className="w-5 h-5" />}
+                  label="Days Studied"
+                  value={`${weekStats.daysStudied}/7`}
+                  color={weekStats.daysStudied >= 5 ? "accent" : "primary"}
+                />
+                <StatCard
+                  icon={<BookOpen className="w-5 h-5" />}
+                  label="Week Sessions"
+                  value={weekStats.sessions.toString()}
+                  color="primary"
+                />
+                <StatCard
+                  icon={<Clock className="w-5 h-5" />}
+                  label="Week Time"
+                  value={`${Math.floor(weekStats.minutes / 60)}h ${weekStats.minutes % 60}m`}
+                  color="primary"
+                />
+                <StatCard
+                  icon={<TrendingUp className="w-5 h-5" />}
+                  label="Week Avg Score"
+                  value={weekStats.avgScore > 0 ? `${weekStats.avgScore}%` : "-"}
+                  color="accent"
+                />
+              </div>
+            )}
+
+            {/* Recent Sessions */}
+            <div className="edu-card p-6">
+              <h2 className="text-lg font-bold mb-4">Recent Study Sessions</h2>
+              {recentSessions.length > 0 ? (
+                <div className="space-y-3">
+                  {recentSessions.map((session) => (
+                    <div
+                      key={session.id}
+                      className="flex items-center justify-between p-4 bg-secondary/30 rounded-xl"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                          <BookOpen className="w-5 h-5 text-primary" />
+                        </div>
+                        <div>
+                          <p className="font-semibold">{session.topic}</p>
+                          <p className="text-sm text-muted-foreground">{session.date}</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-semibold">{session.duration} min</p>
+                        <p className="text-sm text-accent font-medium">Score: {session.score}%</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-semibold">{session.topic}</p>
-                      <p className="text-sm text-muted-foreground">{session.date}</p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-semibold">{session.duration} min</p>
-                    <p className="text-sm text-accent font-medium">Score: {session.score}%</p>
-                  </div>
+                  ))}
                 </div>
-              ))}
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  <BookOpen className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                  <p>No study sessions yet. Start your first session!</p>
+                </div>
+              )}
             </div>
-          ) : (
-            <div className="text-center py-8 text-muted-foreground">
-              <BookOpen className="w-12 h-12 mx-auto mb-4 opacity-50" />
-              <p>No study sessions yet. Start your first session!</p>
-            </div>
-          )}
-        </div>
+          </TabsContent>
+
+          <TabsContent value="rankings" className="mt-6">
+            <StudentRankingCard
+              mySchoolRank={mySchoolRank}
+              myDistrictRank={myDistrictRank}
+              totalSchoolStudents={totalSchoolStudents}
+              totalDistrictStudents={totalDistrictStudents}
+              schoolName={schoolName}
+              district={studentDistrict}
+              rankingHistory={rankingHistory}
+            />
+          </TabsContent>
+        </Tabs>
       </main>
     </div>
   );

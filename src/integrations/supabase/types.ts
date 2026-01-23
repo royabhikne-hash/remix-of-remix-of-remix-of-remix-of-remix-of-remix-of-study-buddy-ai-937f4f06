@@ -237,6 +237,79 @@ export type Database = {
           },
         ]
       }
+      ranking_history: {
+        Row: {
+          created_at: string
+          daily_study_time: number
+          district: string | null
+          district_rank: number | null
+          global_rank: number | null
+          id: string
+          improvement_score: number
+          school_id: string | null
+          school_rank: number | null
+          student_id: string
+          total_score: number
+          week_end: string
+          week_start: string
+          weekly_study_days: number
+        }
+        Insert: {
+          created_at?: string
+          daily_study_time?: number
+          district?: string | null
+          district_rank?: number | null
+          global_rank?: number | null
+          id?: string
+          improvement_score?: number
+          school_id?: string | null
+          school_rank?: number | null
+          student_id: string
+          total_score?: number
+          week_end: string
+          week_start: string
+          weekly_study_days?: number
+        }
+        Update: {
+          created_at?: string
+          daily_study_time?: number
+          district?: string | null
+          district_rank?: number | null
+          global_rank?: number | null
+          id?: string
+          improvement_score?: number
+          school_id?: string | null
+          school_rank?: number | null
+          student_id?: string
+          total_score?: number
+          week_end?: string
+          week_start?: string
+          weekly_study_days?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ranking_history_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ranking_history_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools_public"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ranking_history_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       schools: {
         Row: {
           contact_whatsapp: string | null

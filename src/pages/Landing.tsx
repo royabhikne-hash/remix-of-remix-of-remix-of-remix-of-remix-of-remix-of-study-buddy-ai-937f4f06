@@ -1,3 +1,4 @@
+import React from "react";
 import { BookOpen, Users, GraduationCap, MessageCircle, TrendingUp, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
@@ -139,14 +140,17 @@ const FeatureCard = ({ icon, title, description }: { icon: React.ReactNode; titl
   </div>
 );
 
-const StepCard = ({ step, title, description }: { step: number; title: string; description: string }) => (
-  <div className="text-center">
-    <div className="w-12 h-12 rounded-full bg-primary text-primary-foreground flex items-center justify-center mx-auto mb-4 font-bold text-lg">
-      {step}
+const StepCard = React.forwardRef<HTMLDivElement, { step: number; title: string; description: string }>(
+  ({ step, title, description }, ref) => (
+    <div ref={ref} className="text-center">
+      <div className="w-12 h-12 rounded-full bg-primary text-primary-foreground flex items-center justify-center mx-auto mb-4 font-bold text-lg">
+        {step}
+      </div>
+      <h3 className="font-bold mb-1">{title}</h3>
+      <p className="text-sm text-muted-foreground">{description}</p>
     </div>
-    <h3 className="font-bold mb-1">{title}</h3>
-    <p className="text-sm text-muted-foreground">{description}</p>
-  </div>
+  )
 );
+StepCard.displayName = "StepCard";
 
 export default Landing;

@@ -21,6 +21,7 @@ import {
   Trash2,
   CheckSquare,
   Square,
+  MapPin,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -56,6 +57,8 @@ interface RankingData {
   name: string;
   photo?: string;
   class: string;
+  district?: string;
+  schoolName?: string;
   improvementScore: number;
   dailyStudyTime: number;
   weeklyStudyDays: number;
@@ -90,7 +93,10 @@ const SchoolDashboard = () => {
   const [showReportModal, setShowReportModal] = useState(false);
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("approved");
+  const [rankingsTab, setRankingsTab] = useState<"school" | "district">("school");
   const [rankings, setRankings] = useState<RankingData[]>([]);
+  const [districtRankings, setDistrictRankings] = useState<RankingData[]>([]);
+  const [schoolDistrict, setSchoolDistrict] = useState<string>("");
   
   // Fee payment check
   const [feePaid, setFeePaid] = useState(true);
@@ -245,6 +251,12 @@ const SchoolDashboard = () => {
         // Set rankings from backend
         if (data?.rankings) {
           setRankings(data.rankings);
+        }
+        if (data?.districtRankings) {
+          setDistrictRankings(data.districtRankings);
+        }
+        if (data?.schoolDistrict) {
+          setSchoolDistrict(data.schoolDistrict);
         }
       }
     } catch (error) {
@@ -1069,11 +1081,32 @@ const SchoolDashboard = () => {
 
           {/* Rankings Tab */}
           <TabsContent value="rankings" className="mt-4 sm:mt-6">
-            <StudentRanking 
-              rankings={rankings} 
-              title="🏆 Student Rankings"
-              showTop={20}
-            />
+            <Tabs value={rankingsTab} onValueChange={(v) => setRankingsTab(v as "school" | "district")} className="mb-4">
+              <TabsList className="grid w-full max-w-md grid-cols-2">
+                <TabsTrigger value="school" className="flex items-center gap-2 text-xs sm:text-sm">
+                  <Building2 className="w-3 h-3 sm:w-4 sm:h-4" />
+                  School Rankings
+                </TabsTrigger>
+                <TabsTrigger value="district" className="flex items-center gap-2 text-xs sm:text-sm">
+                  <MapPin className="w-3 h-3 sm:w-4 sm:h-4" />
+                  {schoolDistrict || "District"}
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+            
+            {rankingsTab === "school" ? (
+              <StudentRanking 
+                rankings={rankings} 
+                title="🏆 School Rankings"
+                showTop={20}
+              />
+            ) : (
+              <StudentRanking 
+                rankings={districtRankings} 
+                title={`🏆 ${schoolDistrict} District Rankings`}
+                showTop={20}
+              />
+            )}
           </TabsContent>
         </Tabs>
       </main>
