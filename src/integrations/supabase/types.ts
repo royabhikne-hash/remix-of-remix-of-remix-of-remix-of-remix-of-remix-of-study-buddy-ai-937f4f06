@@ -14,6 +14,56 @@ export type Database = {
   }
   public: {
     Tables: {
+      achievements: {
+        Row: {
+          achieved_at: string
+          achievement_description: string | null
+          achievement_title: string
+          achievement_type: string
+          badge_icon: string
+          id: string
+          is_read: boolean
+          rank_achieved: number | null
+          ranking_type: string | null
+          student_id: string
+          week_start: string | null
+        }
+        Insert: {
+          achieved_at?: string
+          achievement_description?: string | null
+          achievement_title: string
+          achievement_type: string
+          badge_icon?: string
+          id?: string
+          is_read?: boolean
+          rank_achieved?: number | null
+          ranking_type?: string | null
+          student_id: string
+          week_start?: string | null
+        }
+        Update: {
+          achieved_at?: string
+          achievement_description?: string | null
+          achievement_title?: string
+          achievement_type?: string
+          badge_icon?: string
+          id?: string
+          is_read?: boolean
+          rank_achieved?: number | null
+          ranking_type?: string | null
+          student_id?: string
+          week_start?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "achievements_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       admins: {
         Row: {
           admin_id: string
@@ -230,6 +280,50 @@ export type Database = {
           },
           {
             foreignKeyName: "quiz_attempts_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rank_notifications: {
+        Row: {
+          created_at: string
+          id: string
+          is_read: boolean
+          message: string
+          new_rank: number | null
+          notification_type: string
+          old_rank: number | null
+          ranking_type: string
+          student_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          message: string
+          new_rank?: number | null
+          notification_type: string
+          old_rank?: number | null
+          ranking_type: string
+          student_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          message?: string
+          new_rank?: number | null
+          notification_type?: string
+          old_rank?: number | null
+          ranking_type?: string
+          student_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rank_notifications_student_id_fkey"
             columns: ["student_id"]
             isOneToOne: false
             referencedRelation: "students"

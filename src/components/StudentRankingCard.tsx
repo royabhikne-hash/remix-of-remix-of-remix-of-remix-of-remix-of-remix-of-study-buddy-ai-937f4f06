@@ -1,5 +1,6 @@
-import { Trophy, TrendingUp, Clock, Calendar, Medal, Award, Star, MapPin, School } from "lucide-react";
+import { Trophy, TrendingUp, Clock, Calendar, Medal, Award, Star, MapPin, School, Bell } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AchievementBadges, NotificationList } from "@/components/AchievementBadges";
 
 interface RankInfo {
   rank: number;
@@ -17,6 +18,30 @@ interface RankingHistoryItem {
   total_score: number;
 }
 
+interface Achievement {
+  id: string;
+  achievement_type: string;
+  achievement_title: string;
+  achievement_description: string;
+  badge_icon: string;
+  achieved_at: string;
+  ranking_type: string;
+  rank_achieved: number;
+  is_read: boolean;
+  week_start: string;
+}
+
+interface RankNotification {
+  id: string;
+  notification_type: string;
+  message: string;
+  old_rank: number;
+  new_rank: number;
+  ranking_type: string;
+  created_at: string;
+  is_read: boolean;
+}
+
 interface StudentRankingCardProps {
   mySchoolRank: RankInfo | null;
   myDistrictRank: RankInfo | null;
@@ -25,6 +50,9 @@ interface StudentRankingCardProps {
   schoolName: string;
   district: string;
   rankingHistory?: RankingHistoryItem[];
+  achievements?: Achievement[];
+  notifications?: RankNotification[];
+  onMarkNotificationRead?: (id: string) => void;
 }
 
 const StudentRankingCard = ({
@@ -35,6 +63,9 @@ const StudentRankingCard = ({
   schoolName,
   district,
   rankingHistory = [],
+  achievements = [],
+  notifications = [],
+  onMarkNotificationRead,
 }: StudentRankingCardProps) => {
   const getRankIcon = (rank: number) => {
     switch (rank) {
@@ -77,6 +108,8 @@ const StudentRankingCard = ({
       month: "short",
     });
   };
+
+  const unreadNotifications = notifications.filter(n => !n.is_read);
 
   const RankDisplay = ({ 
     rank, 
@@ -160,6 +193,34 @@ const StudentRankingCard = ({
           Based on improvement score, daily study time & weekly consistency
         </p>
       </div>
+
+      {/* Achievements Section */}
+      {achievements.length > 0 && (
+        <div className="edu-card p-4">
+          <h3 className="font-semibold text-sm mb-3 flex items-center gap-2">
+            <Trophy className="w-4 h-4 text-yellow-500" />
+            Your Badges
+          </h3>
+          <AchievementBadges achievements={achievements} />
+        </div>
+      )}
+
+      {/* Notifications */}
+      {unreadNotifications.length > 0 && (
+        <div className="edu-card p-4">
+          <h3 className="font-semibold text-sm mb-3 flex items-center gap-2">
+            <Bell className="w-4 h-4 text-accent" />
+            New Updates
+            <span className="bg-accent text-accent-foreground text-xs px-2 py-0.5 rounded-full">
+              {unreadNotifications.length}
+            </span>
+          </h3>
+          <NotificationList 
+            notifications={unreadNotifications.slice(0, 3)} 
+            onMarkAsRead={onMarkNotificationRead} 
+          />
+        </div>
+      )}
 
       <Tabs defaultValue="school" className="w-full">
         <TabsList className="grid w-full grid-cols-2">

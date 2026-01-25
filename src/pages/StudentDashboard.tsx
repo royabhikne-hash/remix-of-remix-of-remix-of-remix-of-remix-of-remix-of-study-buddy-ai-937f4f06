@@ -79,6 +79,8 @@ const StudentDashboard = () => {
   const [totalSchoolStudents, setTotalSchoolStudents] = useState(0);
   const [totalDistrictStudents, setTotalDistrictStudents] = useState(0);
   const [rankingHistory, setRankingHistory] = useState<any[]>([]);
+  const [achievements, setAchievements] = useState<any[]>([]);
+  const [notifications, setNotifications] = useState<any[]>([]);
   
   const [todayStats, setTodayStats] = useState({
     sessions: 0,
@@ -254,6 +256,7 @@ const StudentDashboard = () => {
 
   const loadRankingData = async (studentIdToLoad: string) => {
     try {
+      // Fetch rankings
       const { data, error } = await supabase.functions.invoke("get-students", {
         body: {
           action: "get_student_rankings",
@@ -273,8 +276,47 @@ const StudentDashboard = () => {
         setTotalDistrictStudents(data.totalDistrictStudents || 0);
         setRankingHistory(data.rankingHistory || []);
       }
+
+      // Fetch achievements
+      const { data: achievementsData } = await supabase
+        .from("achievements")
+        .select("*")
+        .eq("student_id", studentIdToLoad)
+        .order("achieved_at", { ascending: false })
+        .limit(20);
+      
+      if (achievementsData) {
+        setAchievements(achievementsData);
+      }
+
+      // Fetch notifications
+      const { data: notificationsData } = await supabase
+        .from("rank_notifications")
+        .select("*")
+        .eq("student_id", studentIdToLoad)
+        .order("created_at", { ascending: false })
+        .limit(20);
+      
+      if (notificationsData) {
+        setNotifications(notificationsData);
+      }
     } catch (err) {
       console.error("Error loading ranking data:", err);
+    }
+  };
+
+  const handleMarkNotificationRead = async (notificationId: string) => {
+    try {
+      await supabase
+        .from("rank_notifications")
+        .update({ is_read: true })
+        .eq("id", notificationId);
+      
+      setNotifications(prev => 
+        prev.map(n => n.id === notificationId ? { ...n, is_read: true } : n)
+      );
+    } catch (err) {
+      console.error("Error marking notification as read:", err);
     }
   };
 
@@ -744,6 +786,9 @@ const StudentDashboard = () => {
               schoolName={schoolName}
               district={studentDistrict}
               rankingHistory={rankingHistory}
+              achievements={achievements}
+              notifications={notifications}
+              onMarkNotificationRead={handleMarkNotificationRead}
             />
           </TabsContent>
         </Tabs>
