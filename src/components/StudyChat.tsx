@@ -161,18 +161,46 @@ const StudyChat = ({ onEndStudy, studentId }: StudyChatProps) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Detect TTS support once
+  // Detect TTS support with robust WebView check
   useEffect(() => {
-    const supported =
-      typeof window !== "undefined" &&
-      typeof window.speechSynthesis !== "undefined" &&
-      typeof SpeechSynthesisUtterance !== "undefined";
+    const checkTTSSupport = async () => {
+      try {
+        // Basic API check
+        if (typeof window === "undefined" || 
+            typeof window.speechSynthesis === "undefined" ||
+            typeof SpeechSynthesisUtterance === "undefined") {
+          console.log("TTS: Basic API not available");
+          setTtsSupported(false);
+          setAutoSpeak(false);
+          return;
+        }
 
-    setTtsSupported(supported);
-    if (!supported) {
-      // Prevent startup crash/blank screen in WebViews
-      setAutoSpeak(false);
-    }
+        // Test if TTS actually works (some WebViews have the API but it doesn't function)
+        const testUtterance = new SpeechSynthesisUtterance("");
+        testUtterance.volume = 0; // Silent test
+        
+        // Wait for voices to load (required on some devices)
+        const voices = window.speechSynthesis.getVoices();
+        if (voices.length === 0) {
+          // Voices may load async, wait a bit
+          await new Promise(resolve => setTimeout(resolve, 500));
+          const voicesRetry = window.speechSynthesis.getVoices();
+          if (voicesRetry.length === 0) {
+            console.log("TTS: No voices available");
+            // Still mark as supported - some devices load voices later
+          }
+        }
+
+        setTtsSupported(true);
+        console.log("TTS: Supported and ready");
+      } catch (err) {
+        console.warn("TTS check failed:", err);
+        setTtsSupported(false);
+        setAutoSpeak(false);
+      }
+    };
+
+    checkTTSSupport();
   }, []);
 
   // Auto-speak welcome greeting when chatbot first opens
@@ -351,14 +379,14 @@ const StudyChat = ({ onEndStudy, studentId }: StudyChatProps) => {
     });
   };
 
-  // Enhanced Web Speech API for natural Hindi voice with better quality
-  const speakText = (text: string, messageId: string, isQuizQuestion: boolean = false) => {
+  // Enhanced Web Speech API for natural Hindi voice with better quality and WebView compatibility
+  const speakText = useCallback((text: string, messageId: string, isQuizQuestion: boolean = false) => {
     if (!ttsSupported) {
       if (!ttsWarnedRef.current) {
         ttsWarnedRef.current = true;
         toast({
           title: "Voice support nahi hai",
-          description: "Aapke app/webview me Text-to-Speech available nahi hai, isliye voice auto-off kar diya.",
+          description: "Aapke app/browser me Text-to-Speech available nahi hai.",
         });
       }
       return;
@@ -384,86 +412,123 @@ const StudyChat = ({ onEndStudy, studentId }: StudyChatProps) => {
 
     // Clean text and handle Hinglish better
     let cleanText = text
-      .replace(/[🎉📚💪🤖👋✓✔❌⚠️🙏👍💡🎯📊📈📉🔥⭐🎓📖💯✨🏆]/g, '')
+      .replace(/[🎉📚💪🤖👋✓✔❌⚠️🙏👍💡🎯📊📈📉🔥⭐🎓📖💯✨🏆😊🙂😄]/g, '')
       .replace(/\*\*/g, '') // Remove markdown bold
       .replace(/\*/g, '')   // Remove asterisks
       .replace(/_/g, '')    // Remove underscores
       .replace(/#{1,6}\s/g, '') // Remove markdown headers
+      .replace(/\n+/g, '. ') // Replace newlines with pauses
       .trim();
     
     if (!cleanText) return;
     
     setSpeakingMessageId(messageId);
     
-    try {
-      const utterance = new SpeechSynthesisUtterance(cleanText);
-      
-      // Use Hindi for better Hinglish pronunciation
-      utterance.lang = 'hi-IN';
-      
-      // Adjust rate based on context - slower for quiz questions for better clarity
-      utterance.rate = isQuizQuestion ? Math.max(voiceSpeed - 0.1, 0.7) : voiceSpeed;
-      
-      // Natural pitch settings
-      utterance.pitch = 1.0;
-      utterance.volume = 1.0;
-      
-      let voices: SpeechSynthesisVoice[] = [];
+    const speak = () => {
       try {
-        voices = window.speechSynthesis.getVoices();
-      } catch (err) {
-        console.warn("TTS getVoices failed:", err);
-      }
-      
-      // Priority order for voice selection - PREFER MALE VOICES
-      // Look for male voices explicitly first
-      const preferredVoice = 
-        // Hindi male voices (highest priority)
-        voices.find(v => v.lang === 'hi-IN' && v.name.toLowerCase().includes('male')) ||
-        voices.find(v => v.lang === 'hi-IN' && (v.name.includes('Madhur') || v.name.includes('Hemant') || v.name.includes('Prabhat'))) ||
-        voices.find(v => v.lang === 'hi-IN' && v.name.includes('Google') && !v.name.toLowerCase().includes('female')) ||
-        voices.find(v => v.lang === 'hi-IN' && v.name.includes('Microsoft') && !v.name.toLowerCase().includes('female')) ||
-        // Hindi voices that are NOT female
-        voices.find(v => v.lang === 'hi-IN' && !v.name.toLowerCase().includes('female') && !v.name.toLowerCase().includes('woman')) ||
-        // English Indian male voices
-        voices.find(v => v.lang === 'en-IN' && v.name.toLowerCase().includes('male')) ||
-        voices.find(v => v.lang === 'en-IN' && (v.name.includes('Ravi') || v.name.includes('Google') && !v.name.toLowerCase().includes('female'))) ||
-        // Any Hindi voice
-        voices.find(v => v.lang.includes('hi')) ||
-        voices.find(v => v.lang.includes('en-IN'));
-      
-      if (preferredVoice) {
-        utterance.voice = preferredVoice;
-        console.log('Using voice:', preferredVoice.name, preferredVoice.lang);
-      }
-
-      utterance.onend = () => {
-        setSpeakingMessageId(null);
-      };
-
-      utterance.onerror = (e) => {
-        console.error("TTS error event:", e);
-        setSpeakingMessageId(null);
-      };
-
-      // Small delay for better audio quality
-      setTimeout(() => {
+        const utterance = new SpeechSynthesisUtterance(cleanText);
+        
+        // Get available voices
+        let voices: SpeechSynthesisVoice[] = [];
         try {
-          window.speechSynthesis.speak(utterance);
+          voices = window.speechSynthesis.getVoices();
         } catch (err) {
-          console.error("TTS speak failed:", err);
-          setSpeakingMessageId(null);
+          console.warn("TTS getVoices failed:", err);
         }
-      }, 50);
-    } catch (error) {
-      console.error("TTS error:", error);
-      setSpeakingMessageId(null);
-    }
-  };
+        
+        // Priority order for voice selection - PREFER MALE VOICES
+        const preferredVoice = 
+          // Hindi male voices (highest priority)
+          voices.find(v => v.lang === 'hi-IN' && v.name.toLowerCase().includes('male')) ||
+          voices.find(v => v.lang === 'hi-IN' && (v.name.includes('Madhur') || v.name.includes('Hemant') || v.name.includes('Prabhat'))) ||
+          voices.find(v => v.lang === 'hi-IN' && v.name.includes('Google') && !v.name.toLowerCase().includes('female')) ||
+          voices.find(v => v.lang === 'hi-IN' && v.name.includes('Microsoft') && !v.name.toLowerCase().includes('female')) ||
+          // Hindi voices that are NOT female
+          voices.find(v => v.lang === 'hi-IN' && !v.name.toLowerCase().includes('female') && !v.name.toLowerCase().includes('woman')) ||
+          // English Indian male voices
+          voices.find(v => v.lang === 'en-IN' && v.name.toLowerCase().includes('male')) ||
+          voices.find(v => v.lang === 'en-IN' && (v.name.includes('Ravi') || v.name.includes('Google') && !v.name.toLowerCase().includes('female'))) ||
+          // Any Hindi voice
+          voices.find(v => v.lang.includes('hi')) ||
+          voices.find(v => v.lang.includes('en-IN')) ||
+          // Fallback to any available voice
+          voices[0];
+        
+        if (preferredVoice) {
+          utterance.voice = preferredVoice;
+          utterance.lang = preferredVoice.lang;
+          console.log('Using voice:', preferredVoice.name, preferredVoice.lang);
+        } else {
+          // Fallback language
+          utterance.lang = 'hi-IN';
+        }
+        
+        // Adjust rate based on context - slower for quiz questions for better clarity
+        utterance.rate = isQuizQuestion ? Math.max(voiceSpeed - 0.1, 0.7) : voiceSpeed;
+        utterance.pitch = 1.0;
+        utterance.volume = 1.0;
+
+        utterance.onend = () => {
+          setSpeakingMessageId(null);
+        };
+
+        utterance.onerror = (e) => {
+          console.error("TTS error event:", e);
+          setSpeakingMessageId(null);
+          
+          // If error occurs, try again with simpler text (some WebViews fail on long text)
+          if (cleanText.length > 200) {
+            const shortText = cleanText.substring(0, 200) + "...";
+            const shortUtterance = new SpeechSynthesisUtterance(shortText);
+            shortUtterance.lang = utterance.lang;
+            shortUtterance.rate = utterance.rate;
+            if (preferredVoice) shortUtterance.voice = preferredVoice;
+            shortUtterance.onend = () => setSpeakingMessageId(null);
+            shortUtterance.onerror = () => setSpeakingMessageId(null);
+            try {
+              window.speechSynthesis.speak(shortUtterance);
+              setSpeakingMessageId(messageId);
+            } catch {
+              setSpeakingMessageId(null);
+            }
+          }
+        };
+
+        // Chrome/WebView bug fix: resume if paused
+        if (window.speechSynthesis.paused) {
+          window.speechSynthesis.resume();
+        }
+
+        window.speechSynthesis.speak(utterance);
+        
+        // Chrome bug: speech stops after 15 seconds, need to keep-alive
+        const keepAlive = setInterval(() => {
+          if (!window.speechSynthesis.speaking) {
+            clearInterval(keepAlive);
+            return;
+          }
+          window.speechSynthesis.pause();
+          window.speechSynthesis.resume();
+        }, 10000);
+
+        utterance.onend = () => {
+          clearInterval(keepAlive);
+          setSpeakingMessageId(null);
+        };
+
+      } catch (error) {
+        console.error("TTS error:", error);
+        setSpeakingMessageId(null);
+      }
+    };
+
+    // Small delay for better audio quality and to ensure voices are loaded
+    setTimeout(speak, 100);
+  }, [ttsSupported, speakingMessageId, voiceSpeed, toast]);
 
   // Function to speak quiz question with correct numbering
-  const speakQuizQuestion = (question: QuizQuestion, questionNumber?: number) => {
-    if (!autoSpeak) return;
+  const speakQuizQuestion = useCallback((question: QuizQuestion, questionNumber?: number) => {
+    if (!autoSpeak || !ttsSupported) return;
     
     const qNum = questionNumber ?? (currentQuestionIndex + 1);
     let questionText = `Question ${qNum} of ${quizQuestions.length || 5}. ${question.question}`;
@@ -483,7 +548,7 @@ const StudyChat = ({ onEndStudy, studentId }: StudyChatProps) => {
     setTimeout(() => {
       speakText(questionText, `quiz-q-${question.id}`, true);
     }, 500);
-  };
+  }, [autoSpeak, ttsSupported, currentQuestionIndex, quizQuestions.length, speakText]);
 
   const getAIResponse = async (conversationHistory: ChatMessage[]) => {
     try {
