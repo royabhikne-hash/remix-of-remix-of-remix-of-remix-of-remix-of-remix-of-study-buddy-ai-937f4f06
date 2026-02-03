@@ -24,7 +24,20 @@ function checkRateLimit(userId: string, maxRequests = 30, windowMs = 60000): boo
   return true;
 }
 
-const buildSystemPrompt = (pastSessions: any[], weakAreas: string[], strongAreas: string[], currentTopic: string = "") => {
+interface StudentContext {
+  studentClass?: string;
+  board?: string;
+  subject?: string;
+  chapter?: string;
+}
+
+const buildSystemPrompt = (
+  pastSessions: any[], 
+  weakAreas: string[], 
+  strongAreas: string[], 
+  currentTopic: string = "",
+  studentContext: StudentContext = {}
+) => {
   let personalizedContext = "";
   
   if (pastSessions.length > 0) {
@@ -44,6 +57,29 @@ Use this history to:
 `;
   }
 
+  // Student context from profile
+  const studentInfo = studentContext.studentClass || studentContext.board ? `
+STUDENT PROFILE:
+- Class: ${studentContext.studentClass || "Not specified"}
+- Board: ${studentContext.board || "Not specified"}
+${studentContext.subject ? `- Subject: ${studentContext.subject}` : ""}
+${studentContext.chapter ? `- Active Chapter: ${studentContext.chapter}` : ""}
+` : "";
+
+  // Chapter-focused instruction
+  const chapterInstruction = studentContext.chapter ? `
+CRITICAL CHAPTER RESTRICTION:
+You MUST answer ONLY questions related to "${studentContext.chapter}".
+Rules:
+1. If question is about "${studentContext.chapter}" - Answer it fully and helpfully
+2. If question is OUTSIDE "${studentContext.chapter}":
+   - DO NOT answer it
+   - Politely explain: "Ye question ${studentContext.chapter} ke bahar hai"
+   - Redirect student back: "Chalo ${studentContext.chapter} pe focus karte hain"
+3. Never suggest or explain content from other chapters or subjects
+4. Encourage understanding and practice ONLY within "${studentContext.chapter}"
+` : "";
+
   const topicInstruction = currentTopic ? `
 CURRENT STUDY TOPIC: ${currentTopic}
 CRITICAL: You MUST stay focused ONLY on "${currentTopic}". 
@@ -53,8 +89,12 @@ CRITICAL: You MUST stay focused ONLY on "${currentTopic}".
 - All examples, questions, and explanations should be ONLY about ${currentTopic}
 ` : "";
 
-  return `You are an AI Study Buddy for Indian students. You chat in Hinglish (Hindi-English mix) in a respectful and supportive way.
+  return `You are Study Buddy AI - an AI study companion for Indian students. You chat in Hinglish (Hindi-English mix) in a respectful and supportive way.
+
+${studentInfo}
+${chapterInstruction}
 ${topicInstruction}
+
 CRITICAL LANGUAGE RULES:
 - ALWAYS use "aap" (respectful) instead of "tum" or "tu"
 - Use respectful phrases like "Aap", "Ji", "Dekhiye", "Samjhiye"
@@ -125,7 +165,7 @@ serve(async (req) => {
   }
 
   try {
-    const { messages, studentId, analyzeSession, currentTopic } = await req.json();
+    const { messages, studentId, analyzeSession, currentTopic, studentContext } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     
     if (!LOVABLE_API_KEY) {
@@ -146,16 +186,31 @@ serve(async (req) => {
 
     console.log("Processing study chat request with", messages?.length || 0, "messages");
 
-    // Fetch student's past sessions for personalization
+    // Fetch student's past sessions and profile for personalization
     let pastSessions: any[] = [];
     let weakAreas: string[] = [];
     let strongAreas: string[] = [];
+    let studentProfile: StudentContext = studentContext || {};
 
     if (studentId) {
       try {
         const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
         const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
         const supabase = createClient(supabaseUrl, supabaseKey);
+
+        // Fetch student profile if not provided
+        if (!studentContext?.studentClass) {
+          const { data: student } = await supabase
+            .from("students")
+            .select("class, board")
+            .eq("id", studentId)
+            .single();
+          
+          if (student) {
+            studentProfile.studentClass = student.class;
+            studentProfile.board = student.board;
+          }
+        }
 
         const { data: sessions } = await supabase
           .from("study_sessions")
@@ -183,15 +238,16 @@ serve(async (req) => {
         console.log("Loaded student history:", { 
           sessions: pastSessions.length, 
           weakAreas, 
-          strongAreas 
+          strongAreas,
+          studentProfile
         });
       } catch (err) {
         console.error("Error fetching student history:", err);
       }
     }
 
-    // Build personalized system prompt with current topic
-    const systemPrompt = buildSystemPrompt(pastSessions, weakAreas, strongAreas, currentTopic || "");
+    // Build personalized system prompt with current topic and student context
+    const systemPrompt = buildSystemPrompt(pastSessions, weakAreas, strongAreas, currentTopic || "", studentProfile);
 
     // Add analysis instruction if requested
     const analysisInstruction = analyzeSession ? `

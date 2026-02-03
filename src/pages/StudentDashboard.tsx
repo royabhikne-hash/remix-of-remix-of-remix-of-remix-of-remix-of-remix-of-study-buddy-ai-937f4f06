@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -698,32 +698,33 @@ const StudentDashboard = () => {
   );
 };
 
-const StatCard = ({
-  icon,
-  label,
-  value,
-  color,
-}: {
+interface StatCardProps {
   icon: React.ReactNode;
   label: string;
   value: string;
   color: "primary" | "accent" | "muted";
-}) => {
-  const colorClasses = {
-    primary: "bg-primary/10 text-primary",
-    accent: "bg-accent/10 text-accent",
-    muted: "bg-muted text-muted-foreground",
-  };
+}
 
-  return (
-    <div className="edu-card p-4">
-      <div className={`w-10 h-10 rounded-lg ${colorClasses[color]} flex items-center justify-center mb-3`}>
-        {icon}
+const StatCard = React.forwardRef<HTMLDivElement, StatCardProps>(
+  ({ icon, label, value, color }, ref) => {
+    const colorClasses = {
+      primary: "bg-primary/10 text-primary",
+      accent: "bg-accent/10 text-accent",
+      muted: "bg-muted text-muted-foreground",
+    };
+
+    return (
+      <div ref={ref} className="edu-card p-4">
+        <div className={`w-10 h-10 rounded-lg ${colorClasses[color]} flex items-center justify-center mb-3`}>
+          {icon}
+        </div>
+        <p className="text-sm text-muted-foreground">{label}</p>
+        <p className="text-xl font-bold">{value}</p>
       </div>
-      <p className="text-sm text-muted-foreground">{label}</p>
-      <p className="text-xl font-bold">{value}</p>
-    </div>
-  );
-};
+    );
+  }
+);
+
+StatCard.displayName = "StatCard";
 
 export default StudentDashboard;
