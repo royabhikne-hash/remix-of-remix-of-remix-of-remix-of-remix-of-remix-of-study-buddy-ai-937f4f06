@@ -305,19 +305,23 @@ const StudyChat = ({ onEndStudy, studentId }: StudyChatProps) => {
     });
   };
 
-  // Simple TTS function
+  // Robust TTS function with error handling
   const speakText = useCallback(async (text: string, messageId: string, isQuizQuestion: boolean = false) => {
-    if (!ttsSupported) return;
+    // Check TTS support
+    if (!ttsSupported) {
+      console.log('TTS not supported on this device');
+      return;
+    }
 
-    // If already speaking this message, stop
+    // If already speaking this message, stop it
     if (speakingMessageId === messageId) {
-      await stopNativeTTS();
+      stopNativeTTS();
       setSpeakingMessageId(null);
       return;
     }
 
-    // Stop any ongoing speech
-    await stopNativeTTS();
+    // Stop any ongoing speech first
+    stopNativeTTS();
     
     setSpeakingMessageId(messageId);
     
@@ -331,10 +335,19 @@ const StudyChat = ({ onEndStudy, studentId }: StudyChatProps) => {
       });
     } catch (error) {
       console.error("TTS error:", error);
+      // Show toast only if it's a user-initiated action (not auto-speak)
+      if (!autoSpeak) {
+        toast({
+          title: "Voice Error",
+          description: "Voice playback mein problem hui. Try again!",
+          variant: "destructive",
+          duration: 2000
+        });
+      }
     } finally {
       setSpeakingMessageId(null);
     }
-  }, [ttsSupported, speakingMessageId, voiceSpeed, nativeSpeak, stopNativeTTS]);
+  }, [ttsSupported, speakingMessageId, voiceSpeed, nativeSpeak, stopNativeTTS, autoSpeak, toast]);
 
   // Function to speak quiz question with correct numbering
   const speakQuizQuestion = useCallback((question: QuizQuestion, questionNumber?: number) => {
