@@ -24,8 +24,10 @@ import {
   MapPin,
   LayoutGrid,
   List,
+  Key,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -124,6 +126,14 @@ const SchoolDashboard = () => {
   const [bulkProcessing, setBulkProcessing] = useState(false);
   const [showBulkRejectDialog, setShowBulkRejectDialog] = useState(false);
   const [bulkRejectionReason, setBulkRejectionReason] = useState("");
+
+  // Password reset dialog state
+  const [passwordResetDialog, setPasswordResetDialog] = useState<{
+    open: boolean;
+    student: StudentData | null;
+  }>({ open: false, student: null });
+  const [newStudentPassword, setNewStudentPassword] = useState("");
+  const [resetPasswordLoading, setResetPasswordLoading] = useState(false);
 
   useEffect(() => {
     const storedSchoolName = localStorage.getItem("schoolName");
@@ -577,6 +587,55 @@ const SchoolDashboard = () => {
   const handleViewReport = (student: StudentData) => {
     setSelectedStudent(student);
     setShowReportModal(true);
+  };
+
+  const handleResetStudentPassword = async () => {
+    const student = passwordResetDialog.student;
+    if (!student || !newStudentPassword.trim()) return;
+
+    if (newStudentPassword.length < 6) {
+      toast({
+        title: "Invalid Password",
+        description: "Password must be at least 6 characters",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setResetPasswordLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("secure-auth", {
+        body: {
+          action: "reset_student_password",
+          studentData: {
+            studentId: student.id,
+            newPassword: newStudentPassword,
+            schoolSessionToken: localStorage.getItem("schoolSessionToken"),
+            schoolId: schoolUuid,
+          },
+        },
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      toast({
+        title: "Password Reset ✓",
+        description: `Password updated for ${student.name}`,
+      });
+
+      setPasswordResetDialog({ open: false, student: null });
+      setNewStudentPassword("");
+    } catch (error) {
+      console.error("Password reset error:", error);
+      toast({
+        title: "Password Reset Failed",
+        description: error instanceof Error ? error.message : "Could not reset password. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setResetPasswordLoading(false);
+    }
   };
 
   // Debounce search for performance
@@ -1048,6 +1107,18 @@ const SchoolDashboard = () => {
                                 <Button
                                   variant="ghost"
                                   size="sm"
+                                  onClick={() => {
+                                    setPasswordResetDialog({ open: true, student });
+                                    setNewStudentPassword("");
+                                  }}
+                                  className="text-warning hover:text-warning hover:bg-warning/10"
+                                  title="Reset Password"
+                                >
+                                  <Key className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
                                   onClick={() => setDeleteDialog({ open: true, student })}
                                   className="text-destructive hover:text-destructive hover:bg-destructive/10"
                                   disabled={deletingId === student.id}
@@ -1117,6 +1188,18 @@ const SchoolDashboard = () => {
                           >
                             <Eye className="w-3 h-3 mr-1" />
                             {t("school.viewReport")}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setPasswordResetDialog({ open: true, student });
+                              setNewStudentPassword("");
+                            }}
+                            className="text-warning hover:text-warning hover:bg-warning/10"
+                            title="Reset Password"
+                          >
+                            <Key className="w-3 h-3" />
                           </Button>
                           <Button
                             variant="outline"
@@ -1280,6 +1363,58 @@ const SchoolDashboard = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Password Reset Dialog */}
+      <Dialog 
+        open={passwordResetDialog.open} 
+        onOpenChange={(open) => !open && setPasswordResetDialog({ open: false, student: null })}
+      >
+        <DialogContent className="max-w-sm sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base sm:text-lg">
+              <Key className="w-4 h-4 sm:w-5 sm:h-5 text-warning" />
+              Reset Student Password
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <p className="text-xs sm:text-sm text-muted-foreground">
+              Set a new password for <strong>{passwordResetDialog.student?.name}</strong>. 
+              The student will use this password to login.
+            </p>
+            <div className="space-y-2">
+              <Label htmlFor="newPassword">New Password</Label>
+              <Input
+                id="newPassword"
+                type="text"
+                placeholder="Enter new password (min 6 characters)"
+                value={newStudentPassword}
+                onChange={(e) => setNewStudentPassword(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => setPasswordResetDialog({ open: false, student: null })}
+              className="w-full sm:w-auto"
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleResetStudentPassword}
+              disabled={resetPasswordLoading || newStudentPassword.length < 6}
+              className="w-full sm:w-auto bg-warning hover:bg-warning/90 text-warning-foreground"
+            >
+              {resetPasswordLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              ) : (
+                <Key className="w-4 h-4 mr-2" />
+              )}
+              Reset Password
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Student Report Modal */}
       {selectedStudent && (

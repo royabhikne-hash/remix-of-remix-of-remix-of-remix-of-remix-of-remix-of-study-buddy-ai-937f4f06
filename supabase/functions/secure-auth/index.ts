@@ -219,7 +219,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { action, userType, identifier, password, newPassword, schoolData, adminCredentials, sessionToken, adminName, secretKey } = await req.json();
+    const { action, userType, identifier, password, newPassword, schoolData, adminCredentials, sessionToken, adminName, secretKey, studentData } = await req.json();
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -672,6 +672,95 @@ Deno.serve(async (req) => {
         JSON.stringify({ success: true, newPassword }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    } else if (action === "create_admin") {
+    } else if (action === "reset_student_password") {
+      // Admin or School action to reset a student password
+      // Validate caller credentials
+      let isAuthorized = false;
+      let callerType: 'admin' | 'school' | null = null;
+      let callerSchoolId: string | null = null;
+
+      if (adminCredentials?.sessionToken) {
+        const validation = await validateSessionToken(supabase, adminCredentials.sessionToken, 'admin');
+        if (validation.valid) {
+          isAuthorized = true;
+          callerType = 'admin';
+        }
+      }
+
+      if (!isAuthorized && studentData?.schoolSessionToken && studentData?.schoolId) {
+        const validation = await validateSessionToken(supabase, studentData.schoolSessionToken, 'school');
+        if (validation.valid && validation.userId === studentData.schoolId) {
+          isAuthorized = true;
+          callerType = 'school';
+          callerSchoolId = studentData.schoolId;
+        }
+      }
+
+      if (!isAuthorized) {
+        return new Response(
+          JSON.stringify({ error: "Authentication required" }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const { studentId, newPassword: studentNewPassword } = studentData || {};
+
+      if (!studentId || !studentNewPassword) {
+        return new Response(
+          JSON.stringify({ error: "Student ID and new password required" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      if (studentNewPassword.length < 6) {
+        return new Response(
+          JSON.stringify({ error: "Password must be at least 6 characters" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Get the student's user_id
+      const { data: student, error: studentError } = await supabase
+        .from("students")
+        .select("id, user_id, school_id")
+        .eq("id", studentId)
+        .maybeSingle();
+
+      if (studentError || !student) {
+        return new Response(
+          JSON.stringify({ error: "Student not found" }),
+          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // If caller is school, verify student belongs to their school
+      if (callerType === 'school' && student.school_id !== callerSchoolId) {
+        return new Response(
+          JSON.stringify({ error: "Student does not belong to your school" }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Use Supabase Admin API to update the user's password
+      const { error: updateError } = await supabase.auth.admin.updateUserById(
+        student.user_id,
+        { password: studentNewPassword }
+      );
+
+      if (updateError) {
+        console.error("Update student password error:", updateError);
+        return new Response(
+          JSON.stringify({ error: updateError.message || "Failed to update password" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, message: "Student password updated successfully" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+
     } else if (action === "create_admin") {
       // Special action to bootstrap admin (only works if no admins exist)
       const adminId = identifier;

@@ -478,7 +478,7 @@ const StudentProgress = () => {
                 </div>
                 <div>
                   <h1 className="font-bold text-xl bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">{t("progress.title")}</h1>
-                  <p className="text-sm text-muted-foreground">{studentName} • {t("student.class")} {studentClass}</p>
+                  <p className="text-sm text-muted-foreground">{studentName} • Class {studentClass}</p>
                 </div>
               </div>
             </div>

@@ -136,7 +136,7 @@ const StudentReportModal = ({
       // Use edge function for school/admin to bypass RLS
       if (userType === "school" || userType === "admin") {
         const sessionToken = userType === "admin" 
-          ? `admin_${localStorage.getItem("adminId")}_${localStorage.getItem("adminSessionToken")}`
+          ? localStorage.getItem("adminSessionToken")
           : localStorage.getItem("schoolSessionToken");
         
         const { data, error } = await supabase.functions.invoke("get-students", {
