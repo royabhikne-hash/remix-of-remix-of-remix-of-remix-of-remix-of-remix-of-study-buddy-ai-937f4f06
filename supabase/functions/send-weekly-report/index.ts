@@ -6,104 +6,173 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-interface StudentReport {
+interface SessionData {
+  id: string;
+  topic: string;
+  subject: string | null;
+  created_at: string;
+  understanding_level: string | null;
+  time_spent: number | null;
+  improvement_score: number | null;
+  weak_areas: string[] | null;
+  strong_areas: string[] | null;
+  ai_summary: string | null;
+}
+
+interface QuizData {
+  id: string;
+  created_at: string;
+  accuracy_percentage: number | null;
+  correct_count: number;
+  total_questions: number;
+}
+
+interface DetailedReport {
   studentId: string;
   studentName: string;
+  studentClass: string;
+  schoolName: string;
   parentWhatsapp: string;
-  studyConsistency: number;
-  topicsCovered: string[];
-  weakSubjects: string[];
-  improvementSummary: string;
   totalSessions: number;
   totalMinutes: number;
-  avgScore: number;
-}
-
-interface QuizStats {
-  totalAttempts: number;
+  totalQuizzes: number;
   avgAccuracy: number;
-  bestScore: number;
-  questionsAttempted: number;
+  avgScore: number;
+  studyConsistency: number;
+  daysStudied: number;
+  sessions: SessionData[];
+  quizzes: QuizData[];
+  topicsCovered: { topic: string; sessions: number; avgScore: number }[];
+  weakAreas: string[];
+  strongAreas: string[];
+  subjectsStudied: string[];
+  dailyBreakdown: { day: string; date: string; sessions: number; timeSpent: number; quizzes: number }[];
+  grade: string;
+  gradeLabel: string;
+  trend: "improving" | "declining" | "stable";
+  currentStreak: number;
+  recommendations: string[];
+  parentTips: string[];
 }
 
-const getPerformanceEmoji = (score: number): string => {
-  if (score >= 80) return "🌟";
-  if (score >= 60) return "👍";
-  if (score >= 40) return "📈";
-  return "💪";
+const calculateGrade = (avgScore: number, avgAccuracy: number, sessionCount: number): { grade: string; label: string } => {
+  const score = (avgScore * 0.4) + (avgAccuracy * 0.3) + (sessionCount * 5 * 0.3);
+  if (score >= 85) return { grade: "A+", label: "Excellent" };
+  if (score >= 75) return { grade: "A", label: "Very Good" };
+  if (score >= 65) return { grade: "B+", label: "Good" };
+  if (score >= 55) return { grade: "B", label: "Above Average" };
+  if (score >= 45) return { grade: "C", label: "Average" };
+  return { grade: "D", label: "Needs Improvement" };
 };
 
-const getConsistencyEmoji = (consistency: number): string => {
-  if (consistency >= 80) return "🔥";
-  if (consistency >= 60) return "⭐";
-  if (consistency >= 40) return "📅";
-  return "⏰";
-};
-
-const generatePDFContent = (report: StudentReport, quizStats?: QuizStats): string => {
+const generateDetailedWhatsAppMessage = (report: DetailedReport): string => {
   const dateRange = `${new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toLocaleDateString('hi-IN')} - ${new Date().toLocaleDateString('hi-IN')}`;
-  const performanceEmoji = getPerformanceEmoji(report.avgScore);
-  const consistencyEmoji = getConsistencyEmoji(report.studyConsistency);
   
-  // Calculate grade
-  const overallScore = (report.avgScore * 0.4) + (report.studyConsistency * 0.3) + ((quizStats?.avgAccuracy || 0) * 0.3);
-  let grade = "D";
-  if (overallScore >= 85) grade = "A+";
-  else if (overallScore >= 75) grade = "A";
-  else if (overallScore >= 65) grade = "B+";
-  else if (overallScore >= 55) grade = "B";
-  else if (overallScore >= 45) grade = "C";
+  const trendEmoji = report.trend === "improving" ? "📈" : report.trend === "declining" ? "📉" : "➡️";
+  const trendText = report.trend === "improving" ? "IMPROVING" : report.trend === "declining" ? "DECLINING" : "STABLE";
   
-  let message = `🎓 *${report.studentName} का Weekly Report*
-━━━━━━━━━━━━━━━━━━━━
-📅 *Period:* ${dateRange}
-🏆 *Overall Grade:* ${grade} ${performanceEmoji}
+  let message = `🎓 *${report.studentName} - Detailed Weekly Report*
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+🏫 ${report.schoolName}
+📚 ${report.studentClass}
+📅 ${dateRange}
 
-📊 *Study Summary:*
-┌────────────────────
-│ 📚 Sessions: ${report.totalSessions}
-│ ⏱️ Time: ${Math.floor(report.totalMinutes / 60)}h ${report.totalMinutes % 60}m
-│ ${consistencyEmoji} Consistency: ${report.studyConsistency}%
+═══════════════════════════
+        🏆 OVERALL GRADE: ${report.grade}
+              ${report.gradeLabel}
+        ${trendEmoji} Trend: ${trendText}
+═══════════════════════════
+
+📊 *WEEKLY SUMMARY*
+┌─────────────────────────
+│ 📚 Total Sessions: ${report.totalSessions}
+│ ⏱️ Study Time: ${Math.floor(report.totalMinutes / 60)}h ${report.totalMinutes % 60}m
+│ 📝 Quizzes Taken: ${report.totalQuizzes}
+│ ✅ Quiz Accuracy: ${report.avgAccuracy}%
 │ 📈 Avg Score: ${report.avgScore}%
-└────────────────────`;
+│ 🔥 Study Streak: ${report.currentStreak} days
+│ 📅 Days Studied: ${report.daysStudied}/7
+│ 💯 Consistency: ${report.studyConsistency}%
+└─────────────────────────`;
 
-  // Add quiz stats if available
-  if (quizStats && quizStats.totalAttempts > 0) {
-    message += `
-
-🧠 *Quiz Performance:*
-┌────────────────────
-│ 📝 Quizzes: ${quizStats.totalAttempts}
-│ ✅ Accuracy: ${quizStats.avgAccuracy}%
-│ 🎯 Best Score: ${quizStats.bestScore}%
-│ ❓ Questions: ${quizStats.questionsAttempted}
-└────────────────────`;
+  // Daily Breakdown
+  if (report.dailyBreakdown.length > 0) {
+    message += `\n\n📅 *DAILY BREAKDOWN*\n┌─────────────────────────`;
+    
+    report.dailyBreakdown.forEach(day => {
+      const status = day.sessions > 0 ? "✅" : "❌";
+      message += `\n│ ${status} ${day.day} (${day.date}): ${day.sessions} sessions, ${day.timeSpent}min`;
+    });
+    
+    message += `\n└─────────────────────────`;
   }
 
-  message += `
-
-📖 *Topics Padhe:*
-${report.topicsCovered.length > 0 ? report.topicsCovered.slice(0, 5).map(t => `  ✓ ${t}`).join('\n') : '  • Koi topic record nahi hua'}`;
-
-  if (report.weakSubjects.length > 0) {
-    message += `
-
-⚠️ *Improvement Areas:*
-${report.weakSubjects.slice(0, 3).map(s => `  → ${s}`).join('\n')}`;
-  } else {
-    message += `
-
-✨ *No Weak Areas!* Bahut badhiya progress!`;
+  // Subjects Studied
+  if (report.subjectsStudied.length > 0) {
+    message += `\n\n📖 *SUBJECTS STUDIED*\n${report.subjectsStudied.map(s => `  ✓ ${s}`).join('\n')}`;
   }
 
-  message += `
+  // Topics with Performance
+  if (report.topicsCovered.length > 0) {
+    message += `\n\n📝 *TOPICS COVERED*`;
+    report.topicsCovered.slice(0, 8).forEach(t => {
+      const scoreEmoji = t.avgScore >= 70 ? "🌟" : t.avgScore >= 50 ? "👍" : "📚";
+      message += `\n  ${scoreEmoji} ${t.topic}: ${t.sessions}x, ${t.avgScore}%`;
+    });
+  }
 
-💡 *AI Feedback:*
-"${report.improvementSummary}"
+  // Strong Areas
+  if (report.strongAreas.length > 0) {
+    message += `\n\n✅ *STRONG AREAS*\n${report.strongAreas.slice(0, 5).map(s => `  🌟 ${s}`).join('\n')}`;
+  }
 
-━━━━━━━━━━━━━━━━━━━━
-📱 _EduImprove AI - Aapke bachche ka study partner_
-🌐 Daily progress track karein app mein!`;
+  // Weak Areas
+  if (report.weakAreas.length > 0) {
+    message += `\n\n⚠️ *NEEDS IMPROVEMENT*\n${report.weakAreas.slice(0, 5).map(s => `  📚 ${s}`).join('\n')}`;
+  }
+
+  // Quiz Performance Details
+  if (report.totalQuizzes > 0) {
+    const passedQuizzes = report.quizzes.filter(q => (q.accuracy_percentage || 0) >= 50).length;
+    const totalCorrect = report.quizzes.reduce((acc, q) => acc + q.correct_count, 0);
+    const totalQuestions = report.quizzes.reduce((acc, q) => acc + q.total_questions, 0);
+    
+    message += `\n\n🧠 *QUIZ PERFORMANCE*
+┌─────────────────────────
+│ 📝 Total Quizzes: ${report.totalQuizzes}
+│ ✅ Passed: ${passedQuizzes}/${report.totalQuizzes}
+│ ❓ Answered: ${totalCorrect}/${totalQuestions}
+│ 📊 Pass Rate: ${Math.round((passedQuizzes / report.totalQuizzes) * 100)}%
+└─────────────────────────`;
+  }
+
+  // Recent Sessions Summary
+  if (report.sessions.length > 0) {
+    message += `\n\n📋 *RECENT SESSIONS*`;
+    report.sessions.slice(0, 5).forEach(s => {
+      const date = new Date(s.created_at);
+      const dayName = date.toLocaleDateString('hi-IN', { weekday: 'short' });
+      const dateStr = date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+      const levelEmoji = s.understanding_level === 'excellent' ? '🌟' : s.understanding_level === 'good' ? '✅' : s.understanding_level === 'average' ? '📈' : '📚';
+      
+      message += `\n  ${levelEmoji} ${dayName} ${dateStr}: ${s.topic || s.subject || 'General'} (${s.time_spent || 0}min)`;
+    });
+  }
+
+  // AI Recommendations
+  if (report.recommendations.length > 0) {
+    message += `\n\n💡 *AI RECOMMENDATIONS*\n${report.recommendations.map(r => `  ${r}`).join('\n')}`;
+  }
+
+  // Parent Tips
+  message += `\n\n👨‍👩‍👧 *PARENT TIPS*\n${report.parentTips.map(t => `  ${t}`).join('\n')}`;
+
+  // Footer
+  message += `\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━
+📱 *Study Buddy AI*
+🌐 Daily progress track karein!
+
+_${new Date().toLocaleString('hi-IN')}_`;
 
   return message;
 };
@@ -118,7 +187,6 @@ const sendWhatsAppMessage = async (to: string, message: string): Promise<boolean
     return false;
   }
 
-  // Format phone number for WhatsApp
   let formattedTo = to.replace(/\D/g, '');
   if (!formattedTo.startsWith('91')) {
     formattedTo = '91' + formattedTo;
@@ -164,20 +232,18 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Check if this is a single student test request
     let body: { studentId?: string; testMode?: boolean } = {};
     try {
       body = await req.json();
     } catch {
-      // No body provided, process all students
+      // No body provided
     }
 
-    console.log("Starting report generation...", body.testMode ? "(Test Mode)" : "");
+    console.log("Starting detailed report generation...", body.testMode ? "(Test Mode)" : "");
 
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
     
-    // If single student test mode, only fetch that student
-    let studentsQuery = supabase.from("students").select("*");
+    let studentsQuery = supabase.from("students").select("*, schools(name, district, state)");
     if (body.studentId && body.testMode) {
       studentsQuery = studentsQuery.eq("id", body.studentId);
     }
@@ -191,10 +257,9 @@ serve(async (req) => {
 
     console.log(`Found ${students?.length || 0} students`);
 
-    const reports: { studentName: string; sent: boolean }[] = [];
+    const reports: { studentName: string; sent: boolean; reportData?: DetailedReport }[] = [];
 
     for (const student of students || []) {
-      // Get sessions for this student from the past 7 days
       const { data: sessions } = await supabase
         .from("study_sessions")
         .select("*")
@@ -202,103 +267,171 @@ serve(async (req) => {
         .gte("created_at", sevenDaysAgo)
         .order("created_at", { ascending: false });
 
-      // Get quiz attempts for this student
       const { data: quizzes } = await supabase
         .from("quiz_attempts")
         .select("*")
         .eq("student_id", student.id)
-        .gte("created_at", sevenDaysAgo);
+        .gte("created_at", sevenDaysAgo)
+        .order("created_at", { ascending: false });
 
-      const sessionList = sessions || [];
-      const quizList = quizzes || [];
+      const sessionList: SessionData[] = (sessions || []) as SessionData[];
+      const quizList: QuizData[] = (quizzes || []) as QuizData[];
       
-      // Calculate quiz stats
-      const quizStats: QuizStats = {
-        totalAttempts: quizList.length,
-        avgAccuracy: quizList.length > 0 
-          ? Math.round(quizList.reduce((acc, q) => acc + (q.accuracy_percentage || 0), 0) / quizList.length)
-          : 0,
-        bestScore: quizList.length > 0 
-          ? Math.max(...quizList.map(q => q.accuracy_percentage || 0))
-          : 0,
-        questionsAttempted: quizList.reduce((acc, q) => acc + (q.total_questions || 0), 0)
-      };
-      
-      // Calculate metrics
       const totalSessions = sessionList.length;
       const totalMinutes = sessionList.reduce((acc, s) => acc + (s.time_spent || 0), 0);
+      const totalQuizzes = quizList.length;
+      const avgAccuracy = totalQuizzes > 0 
+        ? Math.round(quizList.reduce((acc, q) => acc + (q.accuracy_percentage || 0), 0) / totalQuizzes)
+        : 0;
       const avgScore = totalSessions > 0 
         ? Math.round(sessionList.reduce((acc, s) => acc + (s.improvement_score || 50), 0) / totalSessions)
         : 0;
       
-      // Calculate study consistency (days studied out of 7)
-      const daysStudied = new Set(sessionList.map(s => new Date(s.created_at).toDateString())).size;
+      const studyDates = new Set(sessionList.map(s => new Date(s.created_at).toDateString()));
+      const daysStudied = studyDates.size;
       const studyConsistency = Math.round((daysStudied / 7) * 100);
       
-      // Get unique topics
-      const topicsCovered = [...new Set(sessionList.map(s => s.topic).filter(Boolean))];
+      const topicData: Record<string, { sessions: number; totalScore: number }> = {};
+      sessionList.forEach(s => {
+        const topic = s.topic || "General Study";
+        if (!topicData[topic]) {
+          topicData[topic] = { sessions: 0, totalScore: 0 };
+        }
+        topicData[topic].sessions++;
+        topicData[topic].totalScore += s.improvement_score || 50;
+      });
       
-      // Identify weak areas
-      const weakSessions = sessionList.filter(s => 
-        s.understanding_level === 'weak' || s.understanding_level === 'average'
-      );
-      const weakSubjects = [...new Set(weakSessions.map(s => s.subject || s.topic).filter(Boolean))];
+      const topicsCovered = Object.entries(topicData)
+        .map(([topic, data]) => ({
+          topic,
+          sessions: data.sessions,
+          avgScore: Math.round(data.totalScore / data.sessions),
+        }))
+        .sort((a, b) => b.sessions - a.sessions);
       
-      // Generate improved Hinglish summary
-      let improvementSummary = "";
-      if (totalSessions === 0) {
-        improvementSummary = `${student.full_name} ne is hafte padhai nahi ki. Please daily app use karne ke liye encourage karein!`;
-      } else if (studyConsistency >= 70 && avgScore >= 70) {
-        improvementSummary = `Bahut badhiya! ${student.full_name} regular padh raha hai aur achhe marks la raha hai. Keep it up!`;
-      } else if (studyConsistency >= 70) {
-        improvementSummary = `${student.full_name} ki consistency achhi hai lekin score improve ho sakta hai. Focus on practice!`;
-      } else if (avgScore >= 70) {
-        improvementSummary = `Jab ${student.full_name} padhta hai toh achha karta hai, par aur regularly padhna chahiye.`;
-      } else if (studyConsistency >= 40) {
-        improvementSummary = `Effort theek hai. Daily practice se ${student.full_name} aur improve kar sakta hai.`;
-      } else {
-        improvementSummary = `${student.full_name} ko daily study habit develop karni hogi. Thoda encourage karein!`;
+      const weakAreas = [...new Set(sessionList.flatMap(s => s.weak_areas || []))];
+      const strongAreas = [...new Set(sessionList.flatMap(s => s.strong_areas || []))];
+      const subjectsStudied = [...new Set(sessionList.map(s => s.subject).filter(Boolean))] as string[];
+      
+      const dailyBreakdown: { day: string; date: string; sessions: number; timeSpent: number; quizzes: number }[] = [];
+      for (let i = 6; i >= 0; i--) {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        const dayStr = date.toLocaleDateString("hi-IN", { weekday: "short" });
+        const dateStr = date.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+        
+        const daySessions = sessionList.filter(s => new Date(s.created_at).toDateString() === date.toDateString());
+        const dayQuizzes = quizList.filter(q => new Date(q.created_at).toDateString() === date.toDateString());
+        
+        dailyBreakdown.push({
+          day: dayStr,
+          date: dateStr,
+          sessions: daySessions.length,
+          timeSpent: daySessions.reduce((acc, s) => acc + (s.time_spent || 0), 0),
+          quizzes: dayQuizzes.length,
+        });
       }
-
-      // Add quiz performance insight
-      if (quizStats.totalAttempts > 0) {
-        if (quizStats.avgAccuracy >= 70) {
-          improvementSummary += ` Quiz mein achhi performance hai! 🌟`;
-        } else if (quizStats.avgAccuracy >= 50) {
-          improvementSummary += ` Quiz practice se concepts aur clear honge.`;
+      
+      let currentStreak = 0;
+      for (let i = 0; i <= 6; i++) {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        const hasSession = sessionList.some(s => new Date(s.created_at).toDateString() === date.toDateString());
+        if (hasSession) {
+          currentStreak++;
+        } else if (i === 0) {
+          currentStreak = 0;
+          break;
+        } else {
+          break;
         }
       }
-
-      const report: StudentReport = {
+      
+      let trend: "improving" | "declining" | "stable" = "stable";
+      if (sessionList.length >= 2) {
+        const mid = Math.floor(sessionList.length / 2);
+        const recentAvg = sessionList.slice(0, mid).reduce((acc, s) => acc + (s.improvement_score || 50), 0) / mid;
+        const olderAvg = sessionList.slice(mid).reduce((acc, s) => acc + (s.improvement_score || 50), 0) / (sessionList.length - mid);
+        if (recentAvg > olderAvg + 5) trend = "improving";
+        else if (recentAvg < olderAvg - 5) trend = "declining";
+      }
+      
+      const gradeInfo = calculateGrade(avgScore, avgAccuracy, totalSessions);
+      
+      const recommendations: string[] = [];
+      if (currentStreak === 0) {
+        recommendations.push("🎯 आज से पढ़ाई शुरू करें!");
+      } else if (currentStreak >= 3) {
+        recommendations.push("🏆 शानदार streak! जारी रखें!");
+      }
+      
+      if (avgAccuracy < 50 && totalQuizzes > 0) {
+        recommendations.push("📖 Quiz के लिए topics दोबारा पढ़ें।");
+      } else if (avgAccuracy >= 70) {
+        recommendations.push("⭐ Quiz performance excellent!");
+      }
+      
+      if (weakAreas.length > 0) {
+        recommendations.push(`⚠️ Focus: ${weakAreas.slice(0, 2).join(", ")}`);
+      }
+      
+      if (totalMinutes < 60) {
+        recommendations.push("⏰ Daily 30+ min study करें।");
+      }
+      
+      const parentTips = [
+        "👨‍👩‍👧 रोज़ 10 min बच्चे से बात करें",
+        "🌟 छोटी उपलब्धियों की तारीफ़ करें",
+        "📱 Screen time balance करें",
+        "🏠 शांत जगह दें पढ़ाई के लिए",
+      ];
+      
+      const schoolInfo = student.schools as { name: string; district: string | null; state: string | null } | null;
+      
+      const report: DetailedReport = {
         studentId: student.id,
         studentName: student.full_name,
+        studentClass: student.class,
+        schoolName: schoolInfo?.name || "N/A",
         parentWhatsapp: student.parent_whatsapp,
-        studyConsistency,
-        topicsCovered,
-        weakSubjects,
-        improvementSummary,
         totalSessions,
         totalMinutes,
+        totalQuizzes,
+        avgAccuracy,
         avgScore,
+        studyConsistency,
+        daysStudied,
+        sessions: sessionList,
+        quizzes: quizList,
+        topicsCovered,
+        weakAreas,
+        strongAreas,
+        subjectsStudied,
+        dailyBreakdown,
+        grade: gradeInfo.grade,
+        gradeLabel: gradeInfo.label,
+        trend,
+        currentStreak,
+        recommendations,
+        parentTips,
       };
 
-      // Generate and send report with quiz stats
-      const messageContent = generatePDFContent(report, quizStats);
+      const messageContent = generateDetailedWhatsAppMessage(report);
       const sent = await sendWhatsAppMessage(student.parent_whatsapp, messageContent);
       
-      reports.push({ studentName: student.full_name, sent });
+      reports.push({ studentName: student.full_name, sent, reportData: report });
       
-      // Small delay between messages to avoid rate limiting
       await new Promise(resolve => setTimeout(resolve, 500));
     }
 
-    console.log("Weekly reports completed:", reports);
+    console.log("Detailed weekly reports completed:", reports.map(r => ({ name: r.studentName, sent: r.sent })));
 
     return new Response(
       JSON.stringify({ 
         success: true, 
         message: `Processed ${reports.length} students`,
-        reports 
+        reports,
+        reportData: reports[0]?.reportData || null,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
