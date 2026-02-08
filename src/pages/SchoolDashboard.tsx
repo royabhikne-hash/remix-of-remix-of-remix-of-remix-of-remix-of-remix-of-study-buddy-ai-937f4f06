@@ -53,6 +53,7 @@ import { supabase } from "@/integrations/supabase/client";
 import StudentReportModal from "@/components/StudentReportModal";
 import StudentAnalyticsCard from "@/components/StudentAnalyticsCard";
 import UpgradeRequestsTab from "@/components/UpgradeRequestsTab";
+import ExpiringSubscriptionsWidget from "@/components/ExpiringSubscriptionsWidget";
 import StudentSubscriptionManagement from "@/components/StudentSubscriptionManagement";
 import { useToast } from "@/hooks/use-toast";
 import LanguageToggle from "@/components/LanguageToggle";
@@ -1276,7 +1277,15 @@ const SchoolDashboard = () => {
           </TabsContent>
 
           {/* Subscriptions Tab */}
-          <TabsContent value="subscriptions" className="mt-4 sm:mt-6">
+          <TabsContent value="subscriptions" className="mt-4 sm:mt-6 space-y-4">
+            {/* Expiring Subscriptions Widget */}
+            {!subscriptionLoading && subscriptionStudents.length > 0 && (
+              <ExpiringSubscriptionsWidget 
+                students={subscriptionStudents}
+                daysThreshold={7}
+              />
+            )}
+            
             <Tabs defaultValue="requests" className="space-y-4">
               <TabsList className="grid w-full max-w-md grid-cols-2">
                 <TabsTrigger value="requests" className="flex items-center gap-2 text-xs sm:text-sm">
