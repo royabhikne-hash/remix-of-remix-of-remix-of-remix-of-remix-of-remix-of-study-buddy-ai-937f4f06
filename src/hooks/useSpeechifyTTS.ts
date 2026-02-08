@@ -99,14 +99,20 @@ export const useSpeechifyTTS = () => {
 
     // Check client-side cache first (first 200 chars + voice as key)
     const cacheKey = `${voiceId}:${text.substring(0, 200)}`;
+    
+    // Clear corrupted cache entries that might have JSON instead of audio
     const cachedAudio = clientAudioCache.get(cacheKey);
+    if (cachedAudio && cachedAudio.includes('audio_data')) {
+      clientAudioCache.delete(cacheKey);
+    }
 
     try {
       let audioDataUrl: string;
 
-      if (cachedAudio) {
+      const validCachedAudio = clientAudioCache.get(cacheKey);
+      if (validCachedAudio) {
         console.log('TTS: Using client cache');
-        audioDataUrl = cachedAudio;
+        audioDataUrl = validCachedAudio;
       } else {
         // Create abort controller for cancellation
         abortControllerRef.current = new AbortController();

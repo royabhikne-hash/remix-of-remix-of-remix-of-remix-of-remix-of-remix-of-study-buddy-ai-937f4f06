@@ -164,20 +164,21 @@ serve(async (req) => {
       );
     }
 
-    // Get audio data as arrayBuffer and convert to base64
-    const audioBuffer = await speechifyResponse.arrayBuffer();
-    const uint8Array = new Uint8Array(audioBuffer);
+    // Speechify API returns JSON with audio_data field containing base64 audio
+    const speechifyData = await speechifyResponse.json();
     
-    // Convert to base64 in chunks to avoid stack overflow
-    let binaryString = '';
-    const chunkSize = 8192;
-    for (let i = 0; i < uint8Array.length; i += chunkSize) {
-      const chunk = uint8Array.subarray(i, Math.min(i + chunkSize, uint8Array.length));
-      binaryString += String.fromCharCode.apply(null, Array.from(chunk));
+    if (!speechifyData.audio_data) {
+      console.error('Speechify response missing audio_data:', JSON.stringify(speechifyData).substring(0, 200));
+      return new Response(
+        JSON.stringify({ error: 'Invalid response from TTS service' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
-    const audioBase64 = btoa(binaryString);
     
-    console.log(`TTS: Generated ${audioBuffer.byteLength} bytes of audio`);
+    const audioBase64 = speechifyData.audio_data;
+    const audioSize = Math.round(audioBase64.length * 0.75); // Approximate decoded size
+    
+    console.log(`TTS: Generated ~${audioSize} bytes of audio`);
 
     // Cache the result
     audioCache.set(cacheKey, {
@@ -197,7 +198,7 @@ serve(async (req) => {
         cached: false,
         format: 'mp3',
         textLength: truncatedText.length,
-        audioSize: audioBuffer.byteLength,
+        audioSize: audioSize,
         model: model
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
