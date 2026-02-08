@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { BookOpen, ArrowLeft, Eye, EyeOff } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import LanguageToggle from "@/components/LanguageToggle";
 import AuthRepairButton from "@/components/AuthRepairButton";
@@ -15,13 +16,101 @@ import { loginSchema, validateForm } from "@/lib/validation";
 const Login = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { signIn } = useAuth();
+  const { signIn, user } = useAuth();
   const { t, language } = useLanguage();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [showAuthRepair, setShowAuthRepair] = useState(false);
+
+  // Check for pending signup and create profile if needed
+  useEffect(() => {
+    const handlePendingSignup = async () => {
+      if (!user) return;
+      
+      const pendingData = localStorage.getItem("pendingSignup");
+      if (!pendingData) return;
+      
+      try {
+        const data = JSON.parse(pendingData);
+        
+        // Check if student profile already exists
+        const { data: existingProfile } = await supabase
+          .from("students")
+          .select("id")
+          .eq("user_id", user.id)
+          .maybeSingle();
+        
+        if (existingProfile) {
+          // Profile already exists, clear pending data
+          localStorage.removeItem("pendingSignup");
+          return;
+        }
+        
+        // Upload photo if available (from base64)
+        let photoUrl = null;
+        if (data.photoFile) {
+          try {
+            // Convert base64 to blob
+            const response = await fetch(data.photoFile);
+            const blob = await response.blob();
+            const fileName = `${user.id}/${Date.now()}.jpg`;
+            
+            const { error: uploadError } = await supabase.storage
+              .from('student-photos')
+              .upload(fileName, blob);
+
+            if (!uploadError) {
+              const { data: { publicUrl } } = supabase.storage
+                .from('student-photos')
+                .getPublicUrl(fileName);
+              photoUrl = publicUrl;
+            }
+          } catch (uploadErr) {
+            console.error("Photo upload error:", uploadErr);
+          }
+        }
+        
+        // Create student profile
+        const { error: profileError } = await supabase
+          .from("students")
+          .insert({
+            user_id: user.id,
+            photo_url: photoUrl,
+            full_name: data.fullName,
+            phone: data.phone,
+            parent_whatsapp: data.parentWhatsapp,
+            class: data.class,
+            age: parseInt(data.age),
+            board: data.board,
+            school_id: data.schoolId,
+            district: data.district,
+            state: data.state,
+          });
+
+        if (profileError) {
+          console.error("Profile creation error:", profileError);
+        } else {
+          toast({
+            title: "Profile Created!",
+            description: "Your student profile has been set up successfully.",
+          });
+        }
+        
+        // Clear pending data
+        localStorage.removeItem("pendingSignup");
+        
+        // Navigate to dashboard
+        navigate("/dashboard");
+      } catch (err) {
+        console.error("Error processing pending signup:", err);
+        localStorage.removeItem("pendingSignup");
+      }
+    };
+    
+    handlePendingSignup();
+  }, [user, navigate, toast]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,6 +137,12 @@ const Login = () => {
           toast({
             title: language === 'en' ? "Login Failed" : "लॉगिन फेल",
             description: language === 'en' ? "Invalid email or password. Please try again." : "गलत ईमेल या पासवर्ड।",
+            variant: "destructive",
+          });
+        } else if (error.message.includes("Email not confirmed")) {
+          toast({
+            title: language === 'en' ? "Email Not Verified" : "ईमेल वेरिफाई नहीं हुआ",
+            description: language === 'en' ? "Please check your email and click the verification link." : "कृपया अपना ईमेल चेक करें और वेरिफिकेशन लिंक पर क्लिक करें।",
             variant: "destructive",
           });
         } else {

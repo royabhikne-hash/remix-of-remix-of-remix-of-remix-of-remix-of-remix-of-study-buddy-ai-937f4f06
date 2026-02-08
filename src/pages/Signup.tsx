@@ -131,6 +131,14 @@ const Signup = () => {
       // Sign up with Supabase Auth
       const { error: authError } = await signUp(formData.email, formData.password, {
         full_name: formData.fullName,
+        phone: formData.phone,
+        class: formData.class,
+        age: formData.age,
+        board: formData.board,
+        district: formData.district,
+        state: formData.state,
+        parent_whatsapp: formData.parentWhatsapp,
+        school_id: selectedSchoolId,
       });
 
       if (authError) {
@@ -147,16 +155,59 @@ const Signup = () => {
         return;
       }
 
-      // Wait for auth to complete and get user
+      // Try to get user - may not be available if email confirmation is required
       const { data: { user } } = await supabase.auth.getUser();
       
-      if (!user) {
-        throw new Error("Failed to get user after signup");
+      if (user) {
+        // User is available (email confirmation disabled) - create profile immediately
+        await createStudentProfile(user.id);
+        
+        toast({
+          title: "Account Created!",
+          description: "Welcome to Study Buddy AI. Let's start studying!",
+        });
+        
+        navigate("/dashboard");
+      } else {
+        // Email confirmation is required - show success message
+        toast({
+          title: "Check Your Email! 📧",
+          description: "We've sent a verification link to your email. Please verify to complete signup.",
+        });
+        
+        // Store signup data temporarily for profile creation after verification
+        localStorage.setItem("pendingSignup", JSON.stringify({
+          fullName: formData.fullName,
+          phone: formData.phone,
+          parentWhatsapp: formData.parentWhatsapp,
+          class: formData.class,
+          age: formData.age,
+          board: formData.board,
+          district: formData.district,
+          state: formData.state,
+          schoolId: selectedSchoolId,
+          photoFile: photoPreview, // Store base64 preview
+        }));
+        
+        navigate("/login");
       }
+    } catch (error) {
+      console.error("Signup error:", error);
+      toast({
+        title: "Signup Failed",
+        description: error instanceof Error ? error.message : "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-      // Upload photo to Supabase Storage
+  const createStudentProfile = async (userId: string) => {
+    // Upload photo to Supabase Storage
+    if (photoFile) {
       const fileExt = photoFile.name.split('.').pop();
-      const fileName = `${user.id}/${Date.now()}.${fileExt}`;
+      const fileName = `${userId}/${Date.now()}.${fileExt}`;
       
       const { error: uploadError } = await supabase.storage
         .from('student-photos')
@@ -175,7 +226,7 @@ const Signup = () => {
       const { error: profileError } = await supabase
         .from("students")
         .insert({
-          user_id: user.id,
+          user_id: userId,
           photo_url: publicUrl,
           full_name: formData.fullName,
           phone: formData.phone,
@@ -191,22 +242,6 @@ const Signup = () => {
       if (profileError) {
         console.error("Profile creation error:", profileError);
       }
-
-      toast({
-        title: "Account Created!",
-        description: "Welcome to Study Buddy AI. Let's start studying!",
-      });
-      
-      navigate("/dashboard");
-    } catch (error) {
-      console.error("Signup error:", error);
-      toast({
-        title: "Signup Failed",
-        description: error instanceof Error ? error.message : "Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
     }
   };
 
