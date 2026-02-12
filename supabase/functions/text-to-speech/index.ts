@@ -198,8 +198,9 @@ serve(async (req) => {
     // Always use simba-multilingual for better Hindi/Hinglish support
     const model = 'simba-multilingual';
     
-    // Determine language - for Hinglish (mixed Hindi-English), use hi-IN
-    const detectedLanguage = hasHindi ? 'hi-IN' : (language === 'hi-IN' ? 'hi-IN' : 'en-IN');
+    // Always use hi-IN for Indian accent - this ensures voices like Henry/Natasha 
+    // speak with proper Indian accent even for English text
+    const detectedLanguage = 'hi-IN';
 
     console.log(`TTS Request: ${truncatedText.length} chars, voice: ${voiceId}, model: ${model}, language: ${detectedLanguage}, hasHindi: ${hasHindi}, studentId: ${studentId || 'none'}`);
 

@@ -149,16 +149,26 @@ export const useSmartTTS = (studentId: string | null) => {
     }
   }, []);
 
-  // Stop current speech
+  // Stop ALL speech - both premium and web TTS
   const stop = useCallback(() => {
     cleanupAudio();
     nativeTTS.stop();
+    // Also cancel any browser speechSynthesis directly to be safe
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
     setState(prev => ({ ...prev, isSpeaking: false, isLoading: false }));
   }, [cleanupAudio, nativeTTS]);
 
   // Speak using Premium TTS (Speechify)
   const speakPremium = useCallback(async (options: SmartTTSOptions): Promise<boolean> => {
-    const { text, voiceId = state.currentVoiceId, speed = 1.0, language = 'en-IN' } = options;
+    const { text, voiceId = state.currentVoiceId, speed = 1.0, language = 'hi-IN' } = options;
+
+    // CRITICAL: Stop any native/web TTS before starting premium
+    nativeTTS.stop();
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
 
     // Check cache first
     const cacheKey = `${voiceId}:${text.substring(0, 200)}`;
@@ -186,12 +196,30 @@ export const useSmartTTS = (studentId: string | null) => {
             text, 
             voiceId, 
             speed, 
-            language,
+            language: 'hi-IN', // Always use hi-IN for Indian accent
             studentId, // Pass for usage tracking
           },
         });
 
         if (error) throw new Error(error.message || 'TTS request failed');
+        
+        // Handle FALLBACK_TO_WEB_TTS signal from server
+        if (data?.error === 'FALLBACK_TO_WEB_TTS') {
+          console.log('TTS: Server says fallback to Web TTS -', data.reason);
+          // Update usage info from response
+          if (data?.usageInfo) {
+            setState(prev => ({
+              ...prev,
+              usageInfo: {
+                ...prev.usageInfo!,
+                ...data.usageInfo,
+                usingPremium: false,
+              },
+            }));
+          }
+          return false; // Signal to use web TTS instead
+        }
+        
         if (data?.error) throw new Error(data.error);
         if (!data?.audio) throw new Error('No audio data received');
 
@@ -218,6 +246,12 @@ export const useSmartTTS = (studentId: string | null) => {
         clientAudioCache.set(cacheKey, audioDataUrl);
 
         console.log(`TTS Premium: ${data.audioSize || 'unknown'} bytes, cached: ${data.cached}`);
+      }
+
+      // CRITICAL: Stop native TTS again right before playing premium audio
+      nativeTTS.stop();
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
       }
 
       // Create and play audio
@@ -248,13 +282,16 @@ export const useSmartTTS = (studentId: string | null) => {
       console.error('Premium TTS Error:', error);
       return false;
     }
-  }, [state.currentVoiceId, studentId, cleanupAudio]);
+  }, [state.currentVoiceId, studentId, cleanupAudio, nativeTTS]);
 
   // Speak using Web TTS (Native browser)
   const speakWeb = useCallback(async (options: SmartTTSOptions): Promise<boolean> => {
     const { text, speed = 0.9 } = options;
     
     console.log('TTS: Using Web TTS (Basic/Fallback)');
+    
+    // CRITICAL: Stop any premium audio before starting web TTS
+    cleanupAudio();
     
     try {
       await nativeTTS.speak({
@@ -270,7 +307,7 @@ export const useSmartTTS = (studentId: string | null) => {
       console.error('Web TTS Error:', error);
       return false;
     }
-  }, [nativeTTS]);
+  }, [nativeTTS, cleanupAudio]);
 
   // Main speak function with smart routing
   const speak = useCallback(async (options: SmartTTSOptions): Promise<void> => {
