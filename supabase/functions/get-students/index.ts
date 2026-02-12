@@ -147,14 +147,14 @@ Deno.serve(async (req) => {
         .select('*, schools(name)')
         .eq('school_id', studentData.school_id)
         .eq('is_approved', true)
-        .eq('is_banned', false);
+        .or('is_banned.eq.false,is_banned.is.null');
 
       const { data: allDistrictStudents } = await supabaseAdmin
         .from('students')
         .select('*, schools(name)')
         .eq('district', studentData.district)
         .eq('is_approved', true)
-        .eq('is_banned', false);
+        .or('is_banned.eq.false,is_banned.is.null');
 
       // Fetch sessions for all students
       const fetchSessionsForStudents = async (students: any[]) => {
@@ -399,7 +399,7 @@ Deno.serve(async (req) => {
         .select('*, schools(name)')
         .eq('district', school.district)
         .eq('is_approved', true)
-        .eq('is_banned', false);
+        .or('is_banned.eq.false,is_banned.is.null');
 
       // Fetch study sessions with quiz attempts for each student
       const studentsWithSessions = await Promise.all(

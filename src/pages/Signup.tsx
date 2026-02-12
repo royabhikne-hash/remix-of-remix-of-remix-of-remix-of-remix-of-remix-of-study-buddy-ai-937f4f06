@@ -231,8 +231,8 @@ const Signup = () => {
         age: parseInt(formData.age),
         board: formData.board,
         school_id: selectedSchoolId,
-        district: formData.district,
-        state: formData.state,
+        district: formData.district.trim(),
+        state: formData.state.trim(),
       });
 
     if (profileError) {
