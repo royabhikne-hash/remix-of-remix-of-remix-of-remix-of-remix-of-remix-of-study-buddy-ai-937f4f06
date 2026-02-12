@@ -167,7 +167,7 @@ serve(async (req) => {
     }
 
     // Limit text length for faster response (shorter = faster TTS)
-    const maxLength = 2000;
+    const maxLength = 5000;
     const truncatedText = cleanText.length > maxLength 
       ? cleanText.substring(0, maxLength) + '...'
       : cleanText;

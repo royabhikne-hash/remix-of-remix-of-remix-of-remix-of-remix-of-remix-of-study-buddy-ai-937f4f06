@@ -120,7 +120,7 @@ export const sanitizeForTTS = (text: string): string => {
  * Split text into chunks for native TTS (prevents buffer overflow)
  * Android TTS handles smaller chunks more reliably
  */
-export const splitForNativeTTS = (text: string, maxLength: number = 800): string[] => {
+export const splitForNativeTTS = (text: string, maxLength: number = 1500): string[] => {
   if (text.length <= maxLength) return [text];
   
   const sentences = text.split(/(?<=[।.!?])\s+/);

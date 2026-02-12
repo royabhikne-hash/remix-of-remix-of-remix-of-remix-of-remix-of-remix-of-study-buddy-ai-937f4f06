@@ -146,7 +146,7 @@ export const useNativeTTS = () => {
     return sanitizeForTTS(text);
   }, []);
 
-  const splitIntoChunks = useCallback((text: string, maxLength: number = 1200): string[] => {
+  const splitIntoChunks = useCallback((text: string, maxLength: number = 2000): string[] => {
     if (text.length <= maxLength) return [text];
     
     const sentences = text.split(/(?<=[।.!?])\s+/);
