@@ -395,7 +395,8 @@ export const useNativeTTS = () => {
   }, []);
 
   // ============= MAIN SPEAK FUNCTION =============
-  // Fallback chain: Web Speech API → Android Native TTS
+  // In Android WebView/APK: Android Native TTS FIRST → Web Speech fallback
+  // In Browser: Web Speech API first → Android Native fallback
   const speak = useCallback((options: TTSOptions): Promise<{ success: boolean; engine: ActiveEngine; error?: string }> => {
     const { text, rate = 0.9, pitch = 1.0, volume = 1.0, voiceName } = options;
 
@@ -417,25 +418,41 @@ export const useNativeTTS = () => {
       setIsSpeaking(true);
 
       try {
-        // === STEP 1: Try Web Speech API first ===
-        const webSuccess = await tryWebSpeech(cleanText, rate, pitch, volume, voiceName || selectedVoiceName);
-        if (webSuccess && !isCancelledRef.current) {
-          return { success: true, engine: 'web' as ActiveEngine };
+        // === Android WebView/APK: Try Native FIRST (more reliable in WebView) ===
+        if (isWebViewRef.current && androidNativeAvailableRef.current) {
+          console.log('TTS: Android WebView detected → trying Native TTS first');
+          const nativeSuccess = await tryAndroidNative(cleanText, rate);
+          if (nativeSuccess && !isCancelledRef.current) {
+            return { success: true, engine: 'native' as ActiveEngine };
+          }
+          if (isCancelledRef.current) {
+            return { success: false, engine: 'none' as ActiveEngine };
+          }
+          // Native failed, fall through to Web Speech
+          console.log('TTS: Native failed in WebView, trying Web Speech...');
         }
 
-        // If cancelled, don't try fallback
-        if (isCancelledRef.current) {
-          return { success: false, engine: 'none' as ActiveEngine };
+        // === Try Web Speech API ===
+        if (webSpeechAvailableRef.current) {
+          const webSuccess = await tryWebSpeech(cleanText, rate, pitch, volume, voiceName || selectedVoiceName);
+          if (webSuccess && !isCancelledRef.current) {
+            return { success: true, engine: 'web' as ActiveEngine };
+          }
+          if (isCancelledRef.current) {
+            return { success: false, engine: 'none' as ActiveEngine };
+          }
         }
 
-        // === STEP 2: Fallback to Android Native TTS ===
-        console.log('TTS: Web Speech failed/unavailable, trying Android Native...');
-        const nativeSuccess = await tryAndroidNative(cleanText, rate);
-        if (nativeSuccess) {
-          return { success: true, engine: 'native' as ActiveEngine };
+        // === Try Android Native (if not already tried above) ===
+        if (!isWebViewRef.current && androidNativeAvailableRef.current) {
+          console.log('TTS: Web Speech failed, trying Android Native...');
+          const nativeSuccess = await tryAndroidNative(cleanText, rate);
+          if (nativeSuccess) {
+            return { success: true, engine: 'native' as ActiveEngine };
+          }
         }
 
-        // === BOTH FAILED — No silent failure ===
+        // === ALL FAILED — No silent failure ===
         console.error('TTS: ❌ ALL engines failed! No audio output.');
         setActiveEngine('none');
         return {
